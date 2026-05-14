@@ -8,7 +8,7 @@ This document defines the strict boundaries of what our scripts are allowed to d
 
 EnvForge scripts will **never** include or generate the following commands. These are actively blocked by the `SafetyFilter` in the Template Engine:
 
-- **Delete system files**: No recursive deletions of the root directory (`rm -rf /`) or user home directories (`rm -rf ~`).
+- **Delete system files**: No recursive deletions of the root directory (`rm -rf /`) or user home directories (`rm -rf ~`). The safety regex uses a negative lookahead (`(?!\w)`) to allow standard Docker cleanup patterns like `rm -rf /var/lib/apt/lists/*`. See [ADR-008](./decisions/ADR-008-safety-filter-negative-lookahead.md).
 - **Modify boot configs**: No modifications to GRUB, Windows Boot Manager, or kernel parameters.
 - **Uninstall drivers automatically**: Scripts will not run `apt-get purge nvidia-*` or similar commands. If a driver update is required, the script will halt and instruct the user to perform the update manually.
 - **Filesystem Formatting**: Commands like `mkfs` or `format` are strictly blocked.

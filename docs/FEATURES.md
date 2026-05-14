@@ -1,6 +1,6 @@
 # EnvForge — Feature Specifications
 
-> **Version**: 0.2.0
+> **Version**: 0.3.0
 > **Status**: Phase 1 & 3 Implemented
 > **Last Updated**: 2026-05-14
 
@@ -13,7 +13,7 @@
 | Web Application (Frontend) | ✅ Implemented | Phase 3 |
 | Environment Profiles | ✅ Implemented | Phase 1 & 3 |
 | Script Generation | ✅ Implemented | Phase 1 & 3 |
-| Diagnostic Report Ingestion | ✅ Implemented (partial) | Phase 1 |
+| Diagnostic Report Ingestion | ✅ Implemented (backend + frontend) | Phase 1 & 3 |
 | Environment Verification | 🔲 Planned | Phase 5 |
 | AI Troubleshooting Layer | 🔲 Skeleton only | Phase 4 |
 
@@ -199,6 +199,10 @@ All 15 patterns are blocked and raise `SafetyViolationError`:
 | System shutdown | `shutdown /s`, `shutdown -h` |
 | Base64 decode-exec | `base64 --decode \| sh` |
 
+> **Note (v0.3.0):** The root-delete pattern uses a negative lookahead `(?!\w)` to
+> avoid false positives on standard Docker cleanup commands like
+> `rm -rf /var/lib/apt/lists/*`. See [ADR-008](./decisions/ADR-008-safety-filter-negative-lookahead.md).
+
 ### Download
 `GET /api/v1/scripts/{job_id}/download` returns a `.zip` bundle containing all
 generated scripts plus a `MANIFEST.txt` with job metadata.
@@ -312,10 +316,11 @@ class LLMProvider(ABC):
 **Framework**: Next.js 14+ App Router, TypeScript, TailwindCSS
 
 ### Capabilities
-- **Profile Browser**: View available environment profiles, packages, and descriptions.
-- **Script Generation Wizard**: A multi-step form to configure target OS, output formats, Python, and CUDA versions. Validates selections dynamically based on the chosen profile.
-- **API Integration**: Connects securely to the FastAPI backend (`/api/v1`).
-- **Deployment**: Configured for Vercel production deployment.
+- **Profile Browser**: View available environment profiles, packages, and descriptions. Includes null-safe rendering for optional fields.
+- **Script Generation Wizard**: A multi-step form to configure target OS, output formats, Python, and CUDA versions. Validates selections dynamically based on the chosen profile. See [ADR-007](./decisions/ADR-007-dynamic-ui-compatibility-fields.md).
+- **Diagnostic Dashboard**: Paste CLI agent JSON output to visualize hardware (OS, CPU, GPU, CUDA), run compatibility checks against any profile, and view structured issues with severity badges and suggested fixes. Compatible profiles are rendered as clickable links to the Script Wizard.
+- **API Integration**: Connects securely to the FastAPI backend (`/api/v1`). All TypeScript interfaces are strictly aligned with backend Pydantic schemas.
+- **Deployment**: Configured for Vercel production deployment with proper `NEXT_PUBLIC_API_URL` configuration.
 
 ---
 

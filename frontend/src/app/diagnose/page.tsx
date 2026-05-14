@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { UploadCloud, CheckCircle, AlertTriangle, ShieldAlert, Cpu, HardDrive, Monitor, Terminal } from "lucide-react";
-import { DiagnosticReport, Profile } from "../../types";
+import { DiagnosticReport, DiagnosticResponse, Profile } from "../../types";
 import { api } from "../../services/api";
 import Link from "next/link";
 
@@ -15,7 +15,7 @@ export default function DiagnosePage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState<string>("");
   const [verifying, setVerifying] = useState(false);
-  const [verifyResult, setVerifyResult] = useState<{compatible: boolean, errors: string[]} | null>(null);
+  const [verifyResult, setVerifyResult] = useState<DiagnosticResponse | null>(null);
 
   useEffect(() => {
     async function loadProfiles() {
@@ -48,10 +48,7 @@ export default function DiagnosePage() {
     setVerifyResult(null);
     try {
       const result = await api.diagnose(report, selectedProfile);
-      setVerifyResult({
-        compatible: result.compatible,
-        errors: result.errors
-      });
+      setVerifyResult(result);
     } catch (err: any) {
       setError(err.message || "Verification failed.");
     } finally {
@@ -183,30 +180,50 @@ export default function DiagnosePage() {
             </div>
 
             {verifyResult && (
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} style={{ padding: '1.5rem', background: verifyResult.compatible ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)', border: `1px solid ${verifyResult.compatible ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`, borderRadius: '8px' }}>
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} style={{ padding: '1.5rem', background: verifyResult.issues.length === 0 ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)', border: `1px solid ${verifyResult.issues.length === 0 ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`, borderRadius: '8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                  {verifyResult.compatible ? <CheckCircle color="var(--brand-accent)" size={28} /> : <AlertTriangle color="#ef4444" size={28} />}
-                  <h3 style={{ margin: 0, color: verifyResult.compatible ? 'var(--brand-accent)' : '#ef4444' }}>
-                    {verifyResult.compatible ? "Compatible!" : "Incompatible"}
+                  {verifyResult.issues.length === 0 ? <CheckCircle color="var(--brand-accent)" size={28} /> : <AlertTriangle color="#ef4444" size={28} />}
+                  <h3 style={{ margin: 0, color: verifyResult.issues.length === 0 ? 'var(--brand-accent)' : '#ef4444' }}>
+                    {verifyResult.issues.length === 0 ? "Compatible!" : `${verifyResult.issues.length} Issue(s) Found`}
                   </h3>
                 </div>
-                
-                {verifyResult.compatible ? (
-                  <div>
-                    <p style={{ color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>Your system meets all the requirements for this profile.</p>
-                    <Link href={`/generate?profile=${selectedProfile}`} className="btn btn-primary">Generate Setup Script</Link>
+
+                {verifyResult.compatible_profiles.length > 0 && (
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <p style={{ color: 'var(--text-secondary)', marginBottom: '0.75rem', fontSize: '0.9rem' }}>Compatible Profiles:</p>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                      {verifyResult.compatible_profiles.map(slug => (
+                        <Link key={slug} href={`/generate?profile=${slug}`} style={{ padding: '0.4rem 0.8rem', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', borderRadius: '6px', fontSize: '0.85rem', color: 'var(--brand-accent)', textDecoration: 'none' }}>
+                          {slug}
+                        </Link>
+                      ))}
+                    </div>
                   </div>
-                ) : (
-                  <div>
-                    <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>The following issues were detected:</p>
+                )}
+
+                {verifyResult.issues.length > 0 && (
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <p style={{ color: 'var(--text-secondary)', marginBottom: '0.75rem', fontSize: '0.9rem' }}>Issues Detected:</p>
                     <ul style={{ listStyleType: 'none', padding: 0 }}>
-                      {verifyResult.errors.map((err, i) => (
-                        <li key={i} style={{ padding: '0.75rem', background: 'rgba(0,0,0,0.2)', borderRadius: '4px', marginBottom: '0.5rem', color: '#fca5a5', fontSize: '0.9rem', display: 'flex', gap: '0.75rem' }}>
-                          <ShieldAlert size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
-                          {err}
+                      {verifyResult.issues.map((issue, i) => (
+                        <li key={i} style={{ padding: '0.75rem', background: 'rgba(0,0,0,0.2)', borderRadius: '4px', marginBottom: '0.5rem', fontSize: '0.9rem', display: 'flex', gap: '0.75rem' }}>
+                          <ShieldAlert size={16} color={issue.severity === 'ERROR' ? '#ef4444' : '#eab308'} style={{ flexShrink: 0, marginTop: '2px' }} />
+                          <div>
+                            <div style={{ color: issue.severity === 'ERROR' ? '#fca5a5' : '#fde68a' }}>{issue.message}</div>
+                            {issue.suggested_fix && <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>💡 {issue.suggested_fix}</div>}
+                          </div>
                         </li>
                       ))}
                     </ul>
+                  </div>
+                )}
+
+                {verifyResult.recommendations.length > 0 && (
+                  <div>
+                    <p style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Recommendations:</p>
+                    {verifyResult.recommendations.map((rec, i) => (
+                      <div key={i} style={{ color: 'var(--text-primary)', fontSize: '0.9rem' }}>→ {rec}</div>
+                    ))}
                   </div>
                 )}
               </motion.div>

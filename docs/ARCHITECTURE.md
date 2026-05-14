@@ -219,3 +219,4 @@ FastAPI → OpenRouter / LLM Provider (Phase 4)
 | [ADR-005](./decisions/ADR-005-yaml-seed-service.md) | YAML seed service | Accepted |
 | [ADR-006](./decisions/ADR-006-sqlite-unit-tests.md) | SQLite for unit tests | Accepted |
 | [ADR-007](./decisions/ADR-007-dynamic-ui-compatibility-fields.md) | Dynamic UI for Script Wizard | Accepted |
+| [ADR-008](./decisions/ADR-008-safety-filter-negative-lookahead.md) | Safety Filter negative lookahead | Accepted |

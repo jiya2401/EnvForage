@@ -13,15 +13,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Phase 3 Complete:** Next.js Frontend Web Application.
 - Interactive Profile Browser displaying environment templates, capabilities, and pre-configured packages.
 - Script Generation Wizard with dynamic dependency locking (Python/CUDA version auto-population based on profile restrictions).
+- Diagnostic Dashboard with hardware overview cards, profile compatibility checker, structured issue rendering with severity badges, and one-click navigation to the Script Wizard.
 - API client wrapper for seamless communication with the FastAPI backend.
 - Vercel deployment configuration for edge-optimized hosting.
-- Documentation updates for Phase 3 (Architecture, Workflows, Script Wizard Feature Doc).
+- Documentation updates for Phase 3 (Architecture, Workflows, Script Wizard Feature Doc, Diagnostic Dashboard Feature Doc).
 - ADR-007: Dynamic UI Form Validation for Compatibility Engine.
+- ADR-008: Safety Filter Negative Lookahead for Docker Cleanup Commands.
 
 ### Fixed
 - Re-aligned frontend `PackageDef` interface with backend `PackageSpecSchema` to ensure accurate package rendering.
+- Re-aligned frontend `ScriptGenerationResponse` interface — replaced stale `files_generated: string[]` with correct `scripts: ScriptPreview[]` structure to prevent `Cannot read properties of undefined` crash on results page.
+- Re-aligned frontend `DiagnosticResponse` interface — replaced stale `{compatible, errors}` with correct `{report_id, compatible_profiles, issues, recommendations}` structure to match backend `DiagnoseResponse`.
 - Resolved `422 Unprocessable Content` API error by adding strict `python_version` and `cuda_version` state tracking to the generation wizard.
 - Fixed 500 Internal Server errors during profile fetching by enabling `from_attributes = True` on backend ORM schemas.
+- Fixed Safety Filter false positive: regex `rm\s+-[rRf]{1,3}\s+/` was blocking legitimate Docker `rm -rf /var/lib/apt/lists/*` cleanup. Narrowed to `rm\s+-[rRf]{1,3}\s+/(?!\w)` using a negative lookahead.
+- Fixed doubled download URL (`/api/v1/api/v1/...`) by stripping the `/api/v1` prefix from the base URL before appending the backend's `download_url`.
+- Added null-safety guards for `profile.description` and `profile.tags` on the profiles listing page to prevent crashes when these optional fields are null.
 - Removed trailing slashes in Vercel `NEXT_PUBLIC_API_URL` to fix `Failed to fetch` errors in production.
 
 ## [0.2.0] - 2026-05-06

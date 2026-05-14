@@ -1,6 +1,6 @@
 # EnvForge — Workflow Documentation
 
-> **Version**: 0.2.0
+> **Version**: 0.3.0
 > **Status**: Phase 1 & 3 Implemented
 > **Last Updated**: 2026-05-14
 
@@ -11,7 +11,7 @@
 | Workflow | Status | Notes |
 |---------|--------|-------|
 | Script Generation | ✅ Implemented | API endpoints live |
-| Environment Diagnosis | ✅ Backend implemented | CLI agent is Phase 2 |
+| Environment Diagnosis | ✅ Backend + Frontend | Web Diagnostic Dashboard live |
 | AI Troubleshooting | 🔲 Planned | Phase 4 |
 | Profile Verification | 🔲 Planned | Phase 5 |
 | Contributor Workflow | ✅ Documented | Docker Compose ready |
@@ -90,18 +90,29 @@ GET /api/v1/scripts/{job_id}/download
 
 ---
 
-## Workflow 2: Environment Diagnosis (Backend Implemented ✅, CLI Agent Phase 2 🔲)
+## Workflow 2: Environment Diagnosis (Backend ✅ + Frontend ✅, CLI Agent Phase 2 ✅)
 
 The backend `POST /api/v1/diagnose` endpoint is live and accepts structured
-`DiagnosticReport` JSON. The CLI agent (`envforge diagnose`) that auto-generates
-this JSON is a Phase 2 deliverable.
+`DiagnosticReport` JSON. The frontend **Diagnostic Dashboard** (`/diagnose`)
+provides a web UI for pasting, parsing, and verifying reports against profiles.
 
-### Current (Phase 1) — Manual JSON submission
+### Current (Phase 3) — Web Diagnostic Dashboard
 
 ```
-Obtain DiagnosticReport JSON:
-  Option A (Phase 2): envforge diagnose --send
-  Option B (now):     Manually construct DiagnosticReport JSON
+User opens /diagnose in the EnvForge Web App
+    │
+    ▼
+Paste DiagnosticReport JSON into the text area
+(output of `envforge diagnose --quiet` or manually constructed)
+    │
+    ▼
+Click "Analyze Report" → Client-side JSON parse + validation
+    │
+    ▼
+Hardware Overview rendered (OS, CPU, GPU, CUDA cards)
+    │
+    ▼
+Select Target Profile from dropdown → Click "Run Check"
     │
     ▼
 POST /api/v1/diagnose

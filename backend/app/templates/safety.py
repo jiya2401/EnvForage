@@ -9,7 +9,7 @@ import re
 
 FORBIDDEN_PATTERNS: list[tuple[str, str]] = [
     # Pattern, Description
-    (r"rm\s+-[rRf]{1,3}\s+/", "Recursive delete of root filesystem"),
+    (r"rm\s+-[rRf]{1,3}\s+/(?!\w)", "Recursive delete of root filesystem"),
     (r"rm\s+-[rRf]{1,3}\s+\$HOME", "Recursive delete of home directory"),
     (r"rm\s+-[rRf]{1,3}\s+~", "Recursive delete of home directory (tilde)"),
     (r"mkfs\.", "Filesystem format command"),

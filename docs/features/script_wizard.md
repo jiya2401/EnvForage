@@ -43,8 +43,50 @@ The `ScriptGenerationRequest` constructed by the wizard ensures all required fie
 }
 ```
 
+## Response Handling
+
+The frontend receives a `ScriptGenerationResponse` with the following structure:
+
+```typescript
+interface ScriptGenerationResponse {
+  job_id: string;
+  status: string;
+  profile_slug: string;
+  target_os: string;
+  python_version: string;
+  cuda_version: string | null;
+  resolved_packages: ResolvedPackage[];
+  scripts: ScriptPreview[];   // { filename, content, size_bytes }
+  warnings: string[];
+  download_url: string;       // e.g. "/api/v1/scripts/{job_id}/download"
+}
+```
+
+### Download URL Construction
+
+The backend's `download_url` is a **full path** (e.g., `/api/v1/scripts/{id}/download`), while the frontend's `NEXT_PUBLIC_API_URL` already includes `/api/v1`. To avoid path doubling, the download handler strips the API prefix:
+
+```typescript
+const baseUrl = API_BASE_URL.replace(/\/api\/v1$/, '');
+window.open(`${baseUrl}${result.download_url}`, '_blank');
+```
+
 ## Relevant Files
 
 - `frontend/src/app/generate/page.tsx`: The main multi-step wizard component.
 - `frontend/src/types/index.ts`: TypeScript definitions matching backend Pydantic models.
 - `frontend/src/services/api.ts`: API wrapper for communicating with the backend.
+
+## Related ADRs
+
+- [ADR-007: Dynamic UI Form Validation](../decisions/ADR-007-dynamic-ui-compatibility-fields.md) — Why dropdowns are locked to profile-defined values.
+- [ADR-008: Safety Filter Negative Lookahead](../decisions/ADR-008-safety-filter-negative-lookahead.md) — Why the safety regex was refined to support Dockerfile generation.
+
+## Issues Resolved (v0.3.0)
+
+| Issue | Root Cause | Fix |
+|-------|-----------|-----|
+| `422 Unprocessable Content` | Missing `python_version` / `cuda_version` in payload | Added dynamic dropdowns with `useEffect` auto-defaults |
+| `Cannot read 'length' of undefined` | Frontend had `files_generated` but backend returns `scripts` | Aligned `ScriptGenerationResponse` type |
+| Doubled download URL | `API_BASE_URL` + `download_url` both had `/api/v1` | Strip prefix before concatenation |
+| `SafetyViolationError` on Dockerfile | Regex matched `rm -rf /var/lib/apt/lists/*` | Negative lookahead `(?!\w)` |

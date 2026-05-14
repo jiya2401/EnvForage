@@ -28,7 +28,7 @@ export default function ProfilesPage() {
   }, []);
 
   const filteredProfiles = profiles.filter((p) => {
-    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.description.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || (p.description || '').toLowerCase().includes(search.toLowerCase());
     const matchesOs = osFilter === "ALL" || p.os_support.includes(osFilter);
     return matchesSearch && matchesOs;
   });
@@ -102,7 +102,7 @@ export default function ProfilesPage() {
                   </p>
                   
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                    {profile.tags.map(tag => (
+                    {(profile.tags || []).map(tag => (
                       <span key={tag} style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border-subtle)', padding: '0.2rem 0.6rem', borderRadius: '99px', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                         #{tag}
                       </span>

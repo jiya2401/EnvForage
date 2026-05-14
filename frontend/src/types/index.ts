@@ -28,9 +28,28 @@ export interface ScriptGenerationRequest {
   python_version?: string;
 }
 
+export interface ResolvedPackage {
+  name: string;
+  version: string;
+  cuda_variant: string | null;
+}
+
+export interface ScriptPreview {
+  filename: string;
+  content: string;
+  size_bytes: number;
+}
+
 export interface ScriptGenerationResponse {
   job_id: string;
-  files_generated: string[];
+  status: string;
+  profile_slug: string;
+  target_os: string;
+  python_version: string;
+  cuda_version: string | null;
+  resolved_packages: ResolvedPackage[];
+  scripts: ScriptPreview[];
+  warnings: string[];
   download_url: string;
 }
 
@@ -85,8 +104,17 @@ export interface DiagnosticReport {
   active_python: PythonInfo | null;
 }
 
+export interface CompatibilityIssue {
+  severity: string;
+  component: string;
+  message: string;
+  suggested_fix: string;
+  docs_url?: string;
+}
+
 export interface DiagnosticResponse {
-  compatible: boolean;
-  errors: string[];
-  matched_profile: string | null;
+  report_id: string;
+  compatible_profiles: string[];
+  issues: CompatibilityIssue[];
+  recommendations: string[];
 }

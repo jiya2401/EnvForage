@@ -67,9 +67,9 @@ function WizardContent() {
 
   const handleDownload = () => {
     if (result) {
-      // Assuming download_url is returned from backend, e.g., /api/v1/scripts/{job_id}/download
-      // We prepend the API_BASE_URL if it's a relative path, or just use it.
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+      // download_url from backend is a full path like "/api/v1/scripts/{job_id}/download"
+      // so we only need the origin (host), not the API_BASE_URL which already includes /api/v1
+      const baseUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1').replace(/\/api\/v1$/, '');
       window.open(`${baseUrl}${result.download_url}`, '_blank');
     }
   };
@@ -284,7 +284,7 @@ function WizardContent() {
               <CheckCircleIcon size={32} />
               <div>
                 <h2 style={{ color: 'var(--text-primary)' }}>Success!</h2>
-                <p style={{ color: 'var(--brand-accent)' }}>{result.files_generated.length} files generated securely.</p>
+                <p style={{ color: 'var(--brand-accent)' }}>{result.scripts.length} files generated securely.</p>
               </div>
             </div>
 
@@ -294,7 +294,7 @@ function WizardContent() {
               </div>
               <div style={{ padding: '1.5rem', maxHeight: '400px', overflowY: 'auto' }}>
                 <SyntaxHighlighter language="bash" style={vscDarkPlus} customStyle={{ margin: 0, background: 'transparent' }}>
-                  {`# Your scripts have been generated and are ready to download.\n# Files included:\n${result.files_generated.map(f => `# - ${f}`).join('\n')}\n\n# Note: Scripts have passed the EnvForge Safety Filter.`}
+                  {`# Your scripts have been generated and are ready to download.\n# Files included:\n${result.scripts.map(s => `# - ${s.filename} (${s.size_bytes} bytes)`).join('\n')}\n\n# Note: Scripts have passed the EnvForge Safety Filter.`}
                 </SyntaxHighlighter>
               </div>
             </div>
