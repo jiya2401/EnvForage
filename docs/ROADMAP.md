@@ -129,7 +129,7 @@ on Windows, WSL2, and Ubuntu 22.04. ✅
 - [x] Shell command safety filter
 - [x] `POST /api/troubleshoot` endpoint
 - [x] `POST /api/repair` endpoint (generates repair scripts)
-- [ ] Frontend AI chat interface
+- [x] Frontend AI chat interface
 - [ ] Rate limiting (Redis-based, Phase 4.5)
 
 **Exit Criteria**: Given a diagnostic JSON, AI returns structured fix suggestions.

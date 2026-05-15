@@ -294,6 +294,7 @@ are Phase 5 deliverables.
 - `backend/app/schemas/ai.py` — API-layer Pydantic schemas for AI endpoints
 - `frontend/src/types/index.ts` — AI TypeScript interfaces (TroubleshootRequest, SuggestedFix, RepairResponse, etc.)
 - `frontend/src/services/api.ts` — `troubleshoot()`, `generateRepair()`, `getRepairTemplates()` API methods
+- `frontend/src/app/troubleshoot/page.tsx` — AI Troubleshoot page (diagnostic input, fix cards, repair scripts)
 
 ### AI Provider Interface
 

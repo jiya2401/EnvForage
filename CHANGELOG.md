@@ -34,6 +34,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `backend/app/schemas/ai.py` — API-layer Pydantic schemas for troubleshoot and repair endpoints.
   - `frontend/src/types/index.ts` — Added `TroubleshootRequest`, `TroubleshootResponse`, `SuggestedFix`, `RepairRequest`, `RepairResponse`, `RepairTemplateInfo` TypeScript interfaces.
   - `frontend/src/services/api.ts` — Added `troubleshoot()`, `generateRepair()`, `getRepairTemplates()` API methods with structured error handling.
+- **Phase 4 — Part 6**: Frontend Chat UI.
+  - `frontend/src/app/troubleshoot/page.tsx` — Full AI Troubleshoot page with:
+    - Diagnostic JSON input with sample data prefill
+    - Profile selector and issue description field
+    - Expandable fix cards with severity badges (CRITICAL/WARNING/INFO)
+    - Diagnostic command display with one-click copy
+    - Repair script generation, preview, copy, and download (.sh)
+    - Animated confidence bar and premium glassmorphism design
+  - Added "AI Troubleshoot" nav link to global layout.
 
 ## [0.3.0] - 2026-05-14
 

@@ -29,6 +29,7 @@ export default function RootLayout({
               <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
                 <a href="/profiles">Profiles</a>
                 <a href="/diagnose">Diagnose</a>
+                <a href="/troubleshoot">AI Troubleshoot</a>
               </div>
             </div>
             <div>
