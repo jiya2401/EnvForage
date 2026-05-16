@@ -1,7 +1,6 @@
 """Abstract base class for LLM providers."""
 from abc import ABC, abstractmethod
-from typing import TypeVar
-from pydantic import BaseModel
+from typing import AsyncIterator, TypeVar
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -32,6 +31,26 @@ class LLMProvider(ABC):
 
         Raises:
             LLMProviderError: If the request fails or response cannot be parsed
+        """
+        ...
+
+    @abstractmethod
+    async def stream(
+        self,
+        system_prompt: str,
+        user_message: str,
+        response_model: type[T],
+    ) -> AsyncIterator[str]:
+        """
+        Send a completion request and stream the raw token response.
+
+        Args:
+            system_prompt: System-level instruction for the LLM
+            user_message: The user's structured context message
+            response_model: Pydantic model class for response parsing
+
+        Yields:
+            Raw tokens (or JSON chunks) as they arrive from the provider.
         """
         ...
 
