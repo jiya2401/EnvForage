@@ -8,6 +8,10 @@ Usage:
 """
 from __future__ import annotations
 
+from envforge_agent.detectors import (
+    detect_cpu,
+    detect_cuda,
+    detect_gpus,
     detect_os,
     detect_python,
     detect_ram,

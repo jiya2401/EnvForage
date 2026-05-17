@@ -320,6 +320,88 @@ def test_sarif_no_issues_when_healthy():
     sarif = report.to_sarif()
     assert sarif["runs"][0]["results"] == []
 
+
+class TestVerifyCommand:
+    """Tests for the envforge verify CLI command."""
+
+    @patch("subprocess.run")
+    def test_verify_pass_no_profile(self, mock_run: MagicMock) -> None:
+        from envforge_agent.cli import cli
+        from click.testing import CliRunner
+
+        # Mock the subprocess execution
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = '{"import_ok": true, "cuda_ok": false, "error": null}'
+        mock_run.return_value = mock_proc
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["verify"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["status"] == "PASS"
+        assert "imported successfully" in data["message"]
+        assert "CPU only" in data["message"]
+
+    @patch("subprocess.run")
+    def test_verify_pass_cuda_profile(self, mock_run: MagicMock) -> None:
+        from envforge_agent.cli import cli
+        from click.testing import CliRunner
+
+        # Mock the subprocess execution
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = '{"import_ok": true, "cuda_ok": true, "error": null}'
+        mock_run.return_value = mock_proc
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["verify", "--profile", "pytorch-cuda"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["status"] == "PASS"
+        assert "with CUDA support" in data["message"]
+
+    @patch("subprocess.run")
+    def test_verify_fail_import(self, mock_run: MagicMock) -> None:
+        from envforge_agent.cli import cli
+        from click.testing import CliRunner
+
+        # Mock the subprocess execution
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = '{"import_ok": false, "cuda_ok": false, "error": "ModuleNotFoundError: No module named \'torch\'"}'
+        mock_run.return_value = mock_proc
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["verify"])
+
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        assert data["status"] == "FAIL"
+        assert "PyTorch import failed" in data["message"]
+        assert "ModuleNotFoundError" in data["error"]
+
+    @patch("subprocess.run")
+    def test_verify_fail_cuda_on_gpu_profile(self, mock_run: MagicMock) -> None:
+        from envforge_agent.cli import cli
+        from click.testing import CliRunner
+
+        # Mock the subprocess execution
+        mock_proc = MagicMock()
+        mock_proc.returncode = 0
+        mock_proc.stdout = '{"import_ok": true, "cuda_ok": false, "error": null}'
+        mock_run.return_value = mock_proc
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["verify", "--profile", "pytorch-cuda"])
+
+        assert result.exit_code == 1
+        data = json.loads(result.output)
+        assert data["status"] == "FAIL"
+        assert "CUDA not available" in data["message"]
+
         
 
             

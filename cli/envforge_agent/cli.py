@@ -223,51 +223,112 @@ def _print_diagnose_response(result: dict) -> None:
 
 @cli.command("verify")
 @click.option(
-    "--profile", "-p", required=True,
+    "--profile", "-p", required=False,
     help="Profile slug to verify against (e.g. pytorch-cuda).",
 )
-@click.option(
-    "--api-url",
-    default="http://localhost:8000",
-    show_default=True,
-    envvar="ENVFORGE_API_URL",
-)
-def verify(profile: str, api_url: str) -> None:
+def verify(profile: str | None) -> None:
     """
-    Check if this system is compatible with a specific EnvForge profile.
+    Verify whether the generated ML environment works after setup.
 
-    Collects a DiagnosticReport and sends it to the API for analysis
-    against the requested profile.
+    Checks PyTorch import and, if a GPU profile is detected, CUDA availability.
+    Returns a structured PASS/FAIL JSON result.
     """
-    console.print(f"[bold cyan]Verifying compatibility with profile:[/] {profile}")
+    import subprocess
+
+    # 1. Determine active Python
     report = ReportBuilder().build()
+    active_py = report.active_python
+    py_executable = active_py.path if active_py else sys.executable
 
-    url = f"{api_url.rstrip('/')}/api/v1/diagnose"
+    # 2. Run inline Python script to test torch import and CUDA
+    inspector_script = (
+        "import sys\n"
+        "import json\n"
+        "result = {'import_ok': False, 'cuda_ok': False, 'error': None}\n"
+        "try:\n"
+        "    import torch\n"
+        "    result['import_ok'] = True\n"
+        "    try:\n"
+        "        result['cuda_ok'] = torch.cuda.is_available()\n"
+        "    except Exception as e:\n"
+        "        result['cuda_ok'] = False\n"
+        "except Exception as e:\n"
+        "    result['import_ok'] = False\n"
+        "    result['error'] = f'{type(e).__name__}: {str(e)}'\n"
+        "print(json.dumps(result))\n"
+    )
+
     try:
-        response = httpx.post(
-            url,
-            content=report.to_json(),
-            headers={"Content-Type": "application/json"},
-            timeout=30,
+        proc = subprocess.run(
+            [py_executable, "-c", inspector_script],
+            capture_output=True,
+            text=True,
+            timeout=15
         )
-        response.raise_for_status()
-        result = response.json()
-
-        compatible = profile in result.get("compatible_profiles", [])
-        if compatible:
-            console.print(f"[bold green]✓ COMPATIBLE[/] — {profile} is compatible with this system.")
+        if proc.returncode != 0:
+            res = {
+                "status": "FAIL",
+                "message": "Python verification script failed to execute",
+                "error": proc.stderr.strip() or f"Exit code {proc.returncode}"
+            }
+            click.echo(json.dumps(res, indent=2))
+            sys.exit(1)
+        
+        data = json.loads(proc.stdout.strip())
+        
+        # 3. Analyze checks
+        if not data["import_ok"]:
+            res = {
+                "status": "FAIL",
+                "message": "PyTorch import failed — is it installed?",
+                "error": data["error"]
+            }
+            click.echo(json.dumps(res, indent=2))
+            sys.exit(1)
+        
+        # Check if CUDA profile is detected
+        is_gpu_profile = False
+        if profile:
+            is_gpu_profile = any(term in profile.lower() for term in ["cuda", "gpu", "diffusion", "finetune"])
+        
+        if is_gpu_profile and not data["cuda_ok"]:
+            res = {
+                "status": "FAIL",
+                "message": "PyTorch installed but CUDA not available",
+                "error": "torch.cuda.is_available() returned False"
+            }
+            click.echo(json.dumps(res, indent=2))
+            sys.exit(1)
+        
+        # All required checks passed!
+        msg = "Environment works: PyTorch imported successfully"
+        if data["cuda_ok"]:
+            msg += " with CUDA support"
         else:
-            console.print(f"[bold red]✗ NOT COMPATIBLE[/] — {profile} is not compatible.")
+            msg += " (CPU only)"
+            
+        res = {
+            "status": "PASS",
+            "message": msg
+        }
+        click.echo(json.dumps(res, indent=2))
+        sys.exit(0)
 
-        if result.get("issues"):
-            console.print("\n[bold yellow]Issues:[/]")
-            for issue in result["issues"]:
-                console.print(f"  • {issue['message']}")
-                if issue.get("suggested_fix"):
-                    console.print(f"    → {issue['suggested_fix']}")
-
-    except httpx.ConnectError:
-        err_console.print(f"Cannot connect to {url}. Is the API running?")
+    except subprocess.TimeoutExpired:
+        res = {
+            "status": "FAIL",
+            "message": "Verification timed out",
+            "error": "Subprocess took longer than 15 seconds"
+        }
+        click.echo(json.dumps(res, indent=2))
+        sys.exit(1)
+    except Exception as e:
+        res = {
+            "status": "FAIL",
+            "message": "Verification failed due to an unexpected error",
+            "error": str(e)
+        }
+        click.echo(json.dumps(res, indent=2))
         sys.exit(1)
 
 
