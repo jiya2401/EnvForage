@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest import runner
+from pydoc import cli
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -336,7 +338,7 @@ class TestVerifyCommand:
         mock_run.return_value = mock_proc
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["verify"])
+        result = runner.invoke(cli, ["verify", "-q"])
 
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -356,7 +358,7 @@ class TestVerifyCommand:
         mock_run.return_value = mock_proc
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["verify", "--profile", "pytorch-cuda"])
+        result = runner.invoke(cli, ["verify", "--profile", "pytorch-cuda", "-q"])
 
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -375,7 +377,7 @@ class TestVerifyCommand:
         mock_run.return_value = mock_proc
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["verify"])
+        result = runner.invoke(cli, ["verify", "-q"])
 
         assert result.exit_code == 1
         data = json.loads(result.output)
@@ -395,7 +397,7 @@ class TestVerifyCommand:
         mock_run.return_value = mock_proc
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["verify", "--profile", "pytorch-cuda"])
+        result = runner.invoke(cli, ["verify", "--profile", "pytorch-cuda", "-q"])
 
         assert result.exit_code == 1
         data = json.loads(result.output)

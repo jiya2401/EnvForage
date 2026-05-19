@@ -226,13 +226,31 @@ def _print_diagnose_response(result: dict) -> None:
     "--profile", "-p", required=False,
     help="Profile slug to verify against (e.g. pytorch-cuda).",
 )
-def verify(profile: str | None) -> None:
+@click.option(
+    "--output", "-o",
+    type=click.Path(dir_okay=False, writable=True),
+    default=None,
+    help="Save verification report to a JSON file instead of printing to stdout.",
+)
+@click.option(
+    "--quiet", "-q", is_flag=True, default=False,
+    help="Suppress all output except the JSON verification report.",
+)
+
+def verify(profile: str | None, output: str | None, quiet: bool) -> None:
     """
     Verify whether the generated ML environment works after setup.
 
     Checks PyTorch import and, if a GPU profile is detected, CUDA availability.
     Returns a structured PASS/FAIL JSON result.
     """
+    if not quiet:
+        console.print(Panel(
+            f"[bold cyan]EnvForge Verification Agent[/] v{__version__}\n"
+            "[dim]Running framework sanity checks...[/]",
+            expand=False,
+        ))
+
     import subprocess
 
     # 1. Determine active Python
@@ -248,8 +266,10 @@ def verify(profile: str | None) -> None:
         "try:\n"
         "    import torch\n"
         "    result['import_ok'] = True\n"
+        "    result['torch_version'] = torch.__version__\n"
         "    try:\n"
         "        result['cuda_ok'] = torch.cuda.is_available()\n"
+        "        result['cuda_version'] = torch.version.cuda\n"
         "    except Exception as e:\n"
         "        result['cuda_ok'] = False\n"
         "except Exception as e:\n"
@@ -278,6 +298,8 @@ def verify(profile: str | None) -> None:
         
         # 3. Analyze checks
         if not data["import_ok"]:
+            if not quiet:
+                _print_verification_summary(data, is_gpu_profile=False)
             res = {
                 "status": "FAIL",
                 "message": "PyTorch import failed — is it installed?",
@@ -292,6 +314,8 @@ def verify(profile: str | None) -> None:
             is_gpu_profile = any(term in profile.lower() for term in ["cuda", "gpu", "diffusion", "finetune"])
         
         if is_gpu_profile and not data["cuda_ok"]:
+            if not quiet:
+                _print_verification_summary(data, is_gpu_profile=is_gpu_profile)
             res = {
                 "status": "FAIL",
                 "message": "PyTorch installed but CUDA not available",
@@ -306,6 +330,9 @@ def verify(profile: str | None) -> None:
             msg += " with CUDA support"
         else:
             msg += " (CPU only)"
+
+        if not quiet:
+            _print_verification_summary(data, is_gpu_profile=is_gpu_profile)
             
         res = {
             "status": "PASS",
@@ -331,6 +358,37 @@ def verify(profile: str | None) -> None:
         click.echo(json.dumps(res, indent=2))
         sys.exit(1)
 
+
+def _print_verification_summary(data: dict, is_gpu_profile: bool) -> None:
+    """Print a beautiful human-readable verification matrix to the terminal."""
+    table = Table(box=box.ROUNDED, show_header=True, padding=(0, 1))
+    table.add_column("Check Matrix", style="bold cyan", width=22)
+    table.add_column("Status", width=12, justify="center")
+    table.add_column("Details")
+
+    # PyTorch import check
+    if data.get("import_ok"):
+        torch_v = data.get("torch_version", "Unknown")
+        table.add_row("PyTorch Core Import", "[bold green]PASS[/]", f"Framework loaded cleanly (v{torch_v}).")
+    else:
+        table.add_row("PyTorch Core Import", "[bold red]FAIL[/]", f"[red]{data.get('error')}[/]")
+
+    # CUDA compute engine check
+    if data.get("cuda_ok"):
+        table.add_row("CUDA Compute Engine", "[bold green]PASS[/]", "Graphics hardware handshake succeeded.")
+    else:
+        # If the profile requires GPU but CUDA check failed, mark as FAIL. Otherwise, SKIP.
+        if is_gpu_profile:
+            table.add_row("CUDA Compute Engine", "[bold red]FAIL[/]", "[red]Required by profile, but unavailable.[/]")
+        else:
+            table.add_row("CUDA Compute Engine", "[dim yellow]SKIP[/]", "Running on native CPU space.")
+    cuda_v = data.get("cuda_version") or "Not Detected"
+    table.add_row("Installed CUDA Version", "[dim]INFO[/]", f"{cuda_v}")
+
+    table.add_row("Required CUDA Profile", "[dim]INFO[/]", ">= 11.8 (Recommended for CUDA paths)")
+    
+    console.print("\n[bold]📊 Verification Report:[/]")
+    console.print(table)
 
 # ── envforge fix ───────────────────────────────────────────────────────────────
 
