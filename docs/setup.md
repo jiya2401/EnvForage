@@ -30,24 +30,24 @@ curl -fsSL https://ollama.com/install.sh | sh
 ### Windows
 Download and run the installer from [ollama.com/download](https://ollama.com/download).
 
-### Pull and run the model
-```bash
-# Pull the required model
-ollama pull llama3
+### Start Ollama server and pull the model
 
-# Run it locally
-ollama run llama3
-```
-
-Keep `ollama serve` running in a separate terminal while developing:
+**Step 1 — Start the Ollama server (keep this running in a separate terminal):**
 ```bash
 ollama serve
 ```
 
-Verify the model is available:
+**Step 2 — In a new terminal, pull the required model:**
+```bash
+ollama pull llama3
+```
+
+**Step 3 — Verify the model is available:**
 ```bash
 ollama list
 ```
+
+> **Note:** `ollama run llama3` starts an interactive chat session and is optional for interactive testing only. It is not required for backend integration.
 
 ---
 
@@ -116,8 +116,7 @@ Make sure Docker Desktop is running before executing `docker-compose up -d`.
 Make sure your virtual environment is activated — you should see `(.venv)` in your terminal prompt.
 
 ### Ollama model download is slow
-The `llama3` model is ~4GB. Use a stable internet connection or try `llama3:8b` for faster downloads.
-
+The `llama3` model is ~4GB. Use a stable internet connection. For a smaller/faster download, consider using a smaller variant if available.
 ---
 
 ## Related Documentation
