@@ -170,8 +170,7 @@ async def get_python_framework(framework: str) -> dict:
  "count": len(entries),
  "data": [entry.model_dump() for entry in entries],
  }
-@router.get("/python/{framework}/{version}", summary="Get Python compatibility for a specific
-framework version")
+@router.get("/python/{framework}/{version}", summary="Get Python compatibility for a specific framework version")
 async def get_python_framework_version(framework: str, version: str) -> dict:
  """
  Returns the Python compatibility entry for a specific framework version.
