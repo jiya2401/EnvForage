@@ -86,3 +86,52 @@ async def get_profile_by_id(
         .options(selectinload(EnvironmentProfile.packages))
     )
     return result.scalar_one_or_none()
+
+
+async def create_profile(
+    db: AsyncSession,
+    profile_in: ProfileCreateSchema,
+) -> EnvironmentProfile:
+    """Create a new profile."""
+    # Create main profile entity
+    profile_data = profile_in.model_dump(exclude={"packages"})
+    db_profile = EnvironmentProfile(**profile_data)
+    
+    # Create associated packages
+    for pkg_in in profile_in.packages:
+        pkg_data = pkg_in.model_dump()
+        db_pkg = ProfilePackage(**pkg_data)
+        db_profile.packages.append(db_pkg)
+        
+    db.add(db_profile)
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+    
+    # Fetch the profile again with packages selectinloaded to avoid lazy-loading errors
+    profile = await get_profile_by_id(db, db_profile.id)
+    if not profile:
+        raise ValueError("Failed to retrieve created profile")
+    return profile
+
+
+async def delete_profile(
+    db: AsyncSession,
+    slug: str,
+) -> bool:
+    """Soft delete a profile by slug. Returns True if deleted, False if not found."""
+    profile = await get_profile_by_slug(db, slug)
+    if not profile:
+        return False
+        
+    profile.deleted_at = datetime.now(timezone.utc)
+    profile.status = "DELETED"
+    
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+    return True
