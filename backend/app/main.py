@@ -1,4 +1,3 @@
-cat > backend/app/main.py << 'EOF'
 """
 FastAPI application factory and lifespan management.
 """
@@ -106,4 +105,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-EOF
