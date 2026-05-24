@@ -10,7 +10,7 @@ profiles:
     python_versions: ["3.10", "3.11", "3.12", "3.13"]
     cuda_versions: ["11.8", "12.1"]
     status: ACTIVE
-    last_validated: "2024-12-01"
+    last_validated: "2026-05-24"
     packages:
       - name: torch
         version_spec: "2.1.2"
@@ -45,7 +45,7 @@ profiles:
     python_versions: ["3.10", "3.11", "3.12", "3.13"]
     cuda_versions: ["11.8"]
     status: ACTIVE
-    last_validated: "2024-12-01"
+    last_validated: "2026-05-24"
     packages:
       - name: tensorflow
         version_spec: "2.14.0"
@@ -71,7 +71,7 @@ profiles:
     python_versions: ["3.10", "3.11", "3.12", "3.13"]
     cuda_versions: ["11.8", "12.1"]
     status: ACTIVE
-    last_validated: "2024-12-01"
+    last_validated: "2026-05-24"
     packages:
       - name: ultralytics
         version_spec: "8.2.0"
@@ -101,7 +101,7 @@ profiles:
     python_versions: ["3.10", "3.11", "3.12", "3.13"]
     cuda_versions: ["11.8", "12.1"]
     status: ACTIVE
-    last_validated: "2024-12-01"
+    last_validated: "2026-05-24"
     packages:
       - name: torch
         version_spec: "2.1.2"
@@ -137,7 +137,7 @@ profiles:
     python_versions: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     cuda_versions: []
     status: ACTIVE
-    last_validated: "2024-12-01"
+    last_validated: "2026-05-24"
     packages:
       - name: opencv-python
         version_spec: "4.9.0.80"
@@ -167,7 +167,7 @@ profiles:
     python_versions: ["3.10", "3.11", "3.12", "3.13"]
     cuda_versions: ["11.8", "12.1"]
     status: ACTIVE
-    last_validated: "2024-12-01"
+    last_validated: "2026-05-24"
     packages:
       - name: torch
         version_spec: "2.1.2"
