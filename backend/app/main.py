@@ -12,7 +12,8 @@ from sqlalchemy import text
 
 from app.api.v1 import diagnose, profiles, repair, scripts, troubleshoot, verify
 from app.config import get_settings
-
+from app.cache import get_redis_client
+from app.database import AsyncSessionLocal
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -60,9 +61,6 @@ def create_app() -> FastAPI:
     # ── Health check ──────────────────────────────────────────
     @app.get("/health", include_in_schema=False)
     async def health() -> JSONResponse:
-        from app.cache import get_redis_client
-        from app.database import AsyncSessionLocal
-
         db_status = "ok"
         redis_status = "ok"
         overall = "healthy"

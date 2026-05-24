@@ -5,8 +5,6 @@ from fastapi.testclient import TestClient
 
 from app.main import create_app
 
-client = TestClient(create_app())
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -31,10 +29,10 @@ def _mock_redis_ok():
 
 def test_health_all_ok():
     with (
-        patch("app.database.AsyncSessionLocal", return_value=_mock_db_ok()),
-        patch("app.cache.get_redis_client", new=AsyncMock(return_value=_mock_redis_ok())),
+        patch("app.main.AsyncSessionLocal", return_value=_mock_db_ok()),
+        patch("app.main.get_redis_client", new=AsyncMock(return_value=_mock_redis_ok())),
     ):
-        response = client.get("/health")
+        response = TestClient(create_app()).get("/health")
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "healthy"
@@ -49,12 +47,11 @@ def test_health_db_unavailable():
     bad_cm = MagicMock()
     bad_cm.__aenter__ = AsyncMock(side_effect=Exception("db connection refused"))
     bad_cm.__aexit__ = AsyncMock(return_value=False)
-
     with (
-        patch("app.database.AsyncSessionLocal", return_value=bad_cm),
-        patch("app.cache.get_redis_client", new=AsyncMock(return_value=_mock_redis_ok())),
+        patch("app.main.AsyncSessionLocal", return_value=bad_cm),
+        patch("app.main.get_redis_client", new=AsyncMock(return_value=_mock_redis_ok())),
     ):
-        response = client.get("/health")
+        response = TestClient(create_app()).get("/health")
     assert response.status_code == 503
     body = response.json()
     assert body["status"] == "degraded"
@@ -67,12 +64,11 @@ def test_health_db_unavailable():
 def test_health_redis_unavailable():
     dead_redis = AsyncMock()
     dead_redis.ping = AsyncMock(side_effect=Exception("redis connection refused"))
-
     with (
-        patch("app.database.AsyncSessionLocal", return_value=_mock_db_ok()),
-        patch("app.cache.get_redis_client", new=AsyncMock(return_value=dead_redis)),
+        patch("app.main.AsyncSessionLocal", return_value=_mock_db_ok()),
+        patch("app.main.get_redis_client", new=AsyncMock(return_value=dead_redis)),
     ):
-        response = client.get("/health")
+        response = TestClient(create_app()).get("/health")
     assert response.status_code == 503
     body = response.json()
     assert body["status"] == "degraded"
@@ -86,15 +82,13 @@ def test_health_both_unavailable():
     bad_cm = MagicMock()
     bad_cm.__aenter__ = AsyncMock(side_effect=Exception("db down"))
     bad_cm.__aexit__ = AsyncMock(return_value=False)
-
     dead_redis = AsyncMock()
     dead_redis.ping = AsyncMock(side_effect=Exception("redis down"))
-
     with (
-        patch("app.database.AsyncSessionLocal", return_value=bad_cm),
-        patch("app.cache.get_redis_client", new=AsyncMock(return_value=dead_redis)),
+        patch("app.main.AsyncSessionLocal", return_value=bad_cm),
+        patch("app.main.get_redis_client", new=AsyncMock(return_value=dead_redis)),
     ):
-        response = client.get("/health")
+        response = TestClient(create_app()).get("/health")
     assert response.status_code == 503
     body = response.json()
     assert body["status"] == "degraded"
@@ -106,10 +100,10 @@ def test_health_both_unavailable():
 
 def test_health_redis_not_configured():
     with (
-        patch("app.database.AsyncSessionLocal", return_value=_mock_db_ok()),
-        patch("app.cache.get_redis_client", new=AsyncMock(return_value=None)),
+        patch("app.main.AsyncSessionLocal", return_value=_mock_db_ok()),
+        patch("app.main.get_redis_client", new=AsyncMock(return_value=None)),
     ):
-        response = client.get("/health")
+        response = TestClient(create_app()).get("/health")
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "healthy"
