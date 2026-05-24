@@ -13,6 +13,7 @@ OutputFormat = Literal[
     "Dockerfile",
     "devcontainer.json",
     "pyproject.toml",
+    "Makefile",
 ]
 
 
