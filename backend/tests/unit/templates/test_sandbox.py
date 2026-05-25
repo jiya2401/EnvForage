@@ -36,7 +36,7 @@ def test_sandbox_environment_active():
 def test_sandbox_blocks_unsafe_attributes():
     """Verify that accessing dangerous python class internals is restricted."""
     env = _JINJA_ENV
-    
+
     # Attempting template injection with dangerous attributes
     unsafe_templates = [
         "{{ ''.__class__ }}",
@@ -44,7 +44,7 @@ def test_sandbox_blocks_unsafe_attributes():
         "{{ ().__class__.__bases__[0].__subclasses__() }}",
         "{{ self.__init__.__globals__ }}",
     ]
-    
+
     for t_str in unsafe_templates:
         template = env.from_string(t_str)
         with pytest.raises(SecurityError) as exc_info:
@@ -55,12 +55,12 @@ def test_sandbox_blocks_unsafe_attributes():
 def test_sandbox_allows_safe_filters_and_rendering():
     """Verify that safe built-in filters (default, replace) execute perfectly."""
     env = _JINJA_ENV
-    
+
     # Test 'default' filter
     template_default = env.from_string("{{ value | default('fallback') }}")
     assert template_default.render() == "fallback"
     assert template_default.render(value="custom") == "custom"
-    
+
     # Test 'replace' filter
     template_replace = env.from_string("{{ value | replace('.', '-') }}")
     assert template_replace.render(value="3.11") == "3-11"
