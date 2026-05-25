@@ -88,4 +88,3 @@ async def delete_profile(slug: str, db: DB) -> None:
     deleted = await profile_service.delete_profile(db, slug)
     if not deleted:
         raise EntityNotFoundError(resource=f"Profile '{slug}'")
-    
