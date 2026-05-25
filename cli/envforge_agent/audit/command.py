@@ -63,5 +63,10 @@ def audit_command(source_a: str, source_b: str) -> None:
         err_console.print(f"[ERROR] {exc}")
         sys.exit(2)
 
-    result = diff(src_a, src_b)
+    try:
+        result = diff(src_a, src_b)
+    except (RuntimeError, FileNotFoundError) as exc:
+        err_console.print(f"[ERROR] {exc}")
+        sys.exit(1)
+
     format_text(result, console)

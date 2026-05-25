@@ -6,9 +6,13 @@ from typing import List
 import pytest
 from click.testing import CliRunner
 
+import subprocess
+from unittest.mock import patch
+
 from envforge_agent.audit import (
     audit_command,
     diff,
+    LocalEnvironment,
     LockfileSource,
     Package,
 )
@@ -175,3 +179,26 @@ class TestAuditCommand:
     def test_audit_invalid_source_errors(self):
         result = CliRunner().invoke(audit_command, ["/does/not/exist.txt", "local"])
         assert result.exit_code == 2
+        
+class TestLocalEnvironmentErrors:
+    @patch("envforge_agent.audit.sources.subprocess.run")
+    def test_timeout_raises_runtime_error(self, mock_run):
+        mock_run.side_effect = subprocess.TimeoutExpired(cmd="pip", timeout=30)
+        with pytest.raises(RuntimeError, match=r"did not complete"):
+            list(LocalEnvironment().packages())
+
+    @patch("envforge_agent.audit.sources.subprocess.run")
+    def test_pip_failure_raises_runtime_error(self, mock_run):
+        mock_run.side_effect = subprocess.CalledProcessError(
+            returncode=1, cmd="pip", stderr="permission denied"
+        )
+        with pytest.raises(RuntimeError, match=r"failed with exit code 1"):
+            list(LocalEnvironment().packages())
+
+    @patch("envforge_agent.audit.sources.subprocess.run")
+    def test_malformed_pip_output_raises_runtime_error(self, mock_run):
+        mock_run.return_value = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout="not valid json", stderr=""
+        )
+        with pytest.raises(RuntimeError, match=r"malformed JSON"):
+            list(LocalEnvironment().packages())

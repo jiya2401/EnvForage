@@ -28,23 +28,53 @@ class Source:
 
 
 class LocalEnvironment(Source):
-    """Active Python environment, enumerated via `pip list --format=json`."""
+    """Active Python environment, enumerated via `pip list --format=json`.
+
+    Wraps the subprocess call with a timeout and converts any failure mode
+    (timeout, non-zero exit, missing interpreter, malformed output) into a
+    RuntimeError with a clear message, so the command layer can surface a
+    clean error instead of a raw traceback.
+    """
 
     name = "local"
+    PIP_LIST_TIMEOUT_SECONDS = 30
 
     def __init__(self, python_executable: Optional[str] = None) -> None:
         self.python = python_executable or sys.executable
 
     def packages(self) -> Iterator[Package]:
-        result = subprocess.run(
-            [self.python, "-m", "pip", "list", "--format=json"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        for entry in json.loads(result.stdout):
-            yield Package(name=entry["name"], version=entry["version"])
+        try:
+            result = subprocess.run(
+                [self.python, "-m", "pip", "list", "--format=json"],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=self.PIP_LIST_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"`pip list` did not complete within {self.PIP_LIST_TIMEOUT_SECONDS}s. "
+                f"The active Python environment may be unresponsive."
+            ) from exc
+        except subprocess.CalledProcessError as exc:
+            stderr = (exc.stderr or "").strip() or "<no stderr>"
+            raise RuntimeError(
+                f"`pip list` failed with exit code {exc.returncode}: {stderr}"
+            ) from exc
+        except (FileNotFoundError, OSError) as exc:
+            raise RuntimeError(
+                f"Could not execute Python interpreter at '{self.python}': {exc}"
+            ) from exc
 
+        try:
+            entries = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"`pip list` returned malformed JSON output."
+            ) from exc
+
+        for entry in entries:
+            yield Package(name=entry["name"], version=entry["version"])
 
 class LockfileSource(Source):
     """Requirements-format lockfile (one `package==version` per line).
