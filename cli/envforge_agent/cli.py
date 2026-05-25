@@ -507,6 +507,7 @@ def rollback() -> None:
     """
     import glob
     import shutil
+    import os
 
     backups = sorted(
         p
@@ -545,7 +546,19 @@ def rollback() -> None:
         )
         chosen = backups[idx - 1]
 
-    original = chosen.split("_backup_")[0]
+    chosen_path = Path(chosen)
+    chosen_name = chosen_path.name
+    if "_backup_" not in chosen_name:
+        err_console.print(f"[ERROR] Invalid backup folder name structure: {chosen}")
+        sys.exit(1)
+
+    parts = chosen_name.rsplit("_backup_", 1)
+    original_name = parts[0]
+    if not original_name:
+        err_console.print(f"[ERROR] Could not determine original virtual environment name: {chosen_name}")
+        sys.exit(1)
+
+    original = str(chosen_path.with_name(original_name))
 
     console.print(f"\n[yellow]This will replace '[bold]{original}[/]' with '[bold]{chosen}[/]'[/]")
 
@@ -554,13 +567,29 @@ def rollback() -> None:
         console.print("[dim]Rollback cancelled.[/]")
         sys.exit(0)
 
+    temp_original = None
+    original_path = Path(original)
     try:
-        if Path(original).exists():
-            shutil.rmtree(original)
+        if original_path.exists():
+            temp_original = Path(str(original_path) + f"_rollback_tmp_{os.getpid()}")
+            if temp_original.exists():
+                shutil.rmtree(temp_original)
+            original_path.rename(temp_original)
 
         shutil.copytree(chosen, original)
+        
+        if temp_original and temp_original.exists():
+            shutil.rmtree(temp_original)
+            
         console.print(f"\n[green][+][/] Rollback complete. '[bold]{original}[/]' restored from '[bold]{chosen}[/]'")
 
     except Exception as e:
+        if temp_original and temp_original.exists():
+            try:
+                if original_path.exists():
+                    shutil.rmtree(original_path)
+                temp_original.rename(original_path)
+            except Exception as restore_err:
+                err_console.print(f"[WARNING] Failed to restore original directory: {restore_err}")
         err_console.print(f"[ERROR] Rollback failed: {e}")
         sys.exit(1)
