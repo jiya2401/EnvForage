@@ -11,6 +11,7 @@ OutputFormat = Literal[
     "setup.ps1",
     "requirements.txt",
     "Dockerfile",
+    "environment.yml",
     "docker-compose.yml",
     "devcontainer.json",
     ".gitignore",
