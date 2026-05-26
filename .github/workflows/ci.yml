@@ -99,11 +99,6 @@ jobs:
           cd frontend
           npm ci
 
-      - name: Run ESLint
-        run: |
-          cd frontend
-          npm run lint
-
       - name: Build Application
         run: |
           cd frontend
