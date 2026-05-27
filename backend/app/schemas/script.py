@@ -18,7 +18,7 @@ OutputFormat = Literal[
     "devcontainer.json",
     ".gitignore",
     "pyproject.toml",
-    "pyproject.poetry.toml"
+    "pyproject.poetry.toml",
 ]
 
 
