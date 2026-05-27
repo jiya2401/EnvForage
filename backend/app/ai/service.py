@@ -285,76 +285,76 @@ class AITroubleshootService:
             for cmd in fix.safe_commands:
                 validate_rendered_output(cmd, "ai_safe_command")
 
-        async def _persist_session(
-            self,
-            db: AsyncSession,
-            session_id: str,
-            request: TroubleshootRequest,
-            response: TroubleshootResponse,
-            provider_name: str,
-            model_name: str,
-        ) -> None:
-            """Persist the AI session and suggestions to the database."""
+    async def _persist_session(
+        self,
+        db: AsyncSession,
+        session_id: str,
+        request: TroubleshootRequest,
+        response: TroubleshootResponse,
+        provider_name: str,
+        model_name: str,
+    ) -> None:
+        """Persist the AI session and suggestions to the database."""
 
-            max_retries = 3
+        max_retries = 3
 
-            for attempt in range(max_retries):
-                try:
-                    db_session = AISession(
-                        id=uuid.UUID(session_id),
-                        provider=provider_name,
-                        model=model_name,
+        for attempt in range(max_retries):
+            try:
+                db_session = AISession(
+                    id=uuid.UUID(session_id),
+                    provider=provider_name,
+                    model=model_name,
+                    created_at=datetime.utcnow(),
+                )
+
+                db.add(db_session)
+
+                await db.flush()
+
+                for fix in response.suggested_fixes:
+                    db_suggestion = AISuggestion(
+                        id=uuid.uuid4(),
+                        session_id=db_session.id,
+                        step_number=fix.step,
+                        title=fix.title,
+                        description=fix.description,
+                        severity=fix.severity,
+                        safe_commands=(
+                            fix.safe_commands if fix.safe_commands else None,
+                        ),
+                        template_id=fix.repair_template_id,
                         created_at=datetime.utcnow(),
                     )
 
-                    db.add(db_session)
+                    db.add(db_suggestion)
 
-                    await db.flush()
+                return
 
-                    for fix in response.suggested_fixes:
-                        db_suggestion = AISuggestion(
-                            id=uuid.uuid4(),
-                            session_id=db_session.id,
-                            step_number=fix.step,
-                            title=fix.title,
-                            description=fix.description,
-                            severity=fix.severity,
-                            safe_commands=(
-                                fix.safe_commands if fix.safe_commands else None,
-                            ),
-                            template_id=fix.repair_template_id,
-                            created_at=datetime.utcnow(),
-                        )
+            except Exception as exc:
+                await db.rollback()
 
-                        db.add(db_suggestion)
+                logger.error(
+                    "Failed to persist AI session " "(attempt %d/%d): %s",
+                    attempt + 1,
+                    max_retries,
+                    exc,
+                )
 
-                    return
-
-                except Exception as exc:
-                    await db.rollback()
-
-                    logger.error(
-                        "Failed to persist AI session " "(attempt %d/%d): %s",
-                        attempt + 1,
-                        max_retries,
-                        exc,
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        "Retrying AI session persistence" "for session %s",
+                        session_id,
                     )
 
-                    if attempt < max_retries - 1:
-                        logger.warning(
-                            "Retrying AI session persistence" "for session %s",
-                            session_id,
-                        )
+                    await asyncio.sleep(1)
 
-                        await asyncio.sleep(1)
+        logger.critical(
+            "AI session persistence permanently failed" " for session %s",
+            session_id,
+        )
 
-            logger.critical(
-                "AI session persistence permanently failed" " for session %s",
-                session_id,
-            )
-
-            # Don't fail the request if persistence fails
-            # The response is still valid
+        # Don't fail the request if persistence fails
+        # The response is still valid
 
     async def _log_audit(
         self,
