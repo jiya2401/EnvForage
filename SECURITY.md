@@ -25,7 +25,7 @@ Instead, please email **rishabh0510@gmail.com** with:
 
 ## Unsafe Command Policy
 
-EnvForge explicitly forbids the generation of dangerous shell commands. Every generated script passes through a strict `SafetyFilter`. We consider any bypass of this filter a critical security vulnerability. 
+EnvForge explicitly forbids the generation of dangerous shell commands. Every generated script passes through a strict `SafetyFilter`. We consider any bypass of this filter a critical security vulnerability.
 
 **Prohibited commands include, but are not limited to:**
 - Recursive directory deletion (`rm -rf /`, `rm -rf $HOME`)
@@ -38,7 +38,7 @@ For full details, read our [Script Safety Policy](./docs/SCRIPT_SAFETY.md).
 
 ## No Destructive Automation
 
-EnvForge is designed to *provision* and *repair*, not to blindly destroy. 
+EnvForge is designed to *provision* and *repair*, not to blindly destroy.
 - We do not generate scripts that automatically uninstall GPU drivers.
 - We do not generate scripts that forcefully delete Python environments without explicit user consent.
 - All repair scripts must be auditable plain-text files.
