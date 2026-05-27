@@ -56,11 +56,10 @@ PROFILE_VERIFY_TEMPLATES: dict[str, str] = {
 
 def _build_jinja_env() -> Environment:
     return Environment(
-        loader=FileSystemLoader(str(TEMPLATES_DIR)),
-
-        undefined=StrictUndefined,  # Error on undefined variables
-        autoescape=False,  # Shell scripts are NOT HTML — no escaping
-    )
+    loader=FileSystemLoader(str(TEMPLATES_DIR)),
+    undefined=StrictUndefined,
+    autoescape=False,
+)
 
 @lru_cache(maxsize=16)
 def _get_jinja_env(custom_template_dir: Path | None) -> SandboxedEnvironment:
