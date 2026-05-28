@@ -6,11 +6,11 @@ Scenarios:
   "mixed" → HIGH + MEDIUM + LOW fixes (tests full pipeline)
   "gate"  → score below LOW_CONFIDENCE_GATE (tests suppression)
 """
-
 from __future__ import annotations
-from typing import Type
+
 from pydantic import BaseModel
-from ..models import FixConfidenceLevel, SuggestedFix, TroubleshootResponse
+
+from ..models import FixConfidenceLevel, SuggestedFix
 from .base import LLMProvider
 
 _HIGH_FIXES = [
@@ -107,21 +107,46 @@ class MockProvider(LLMProvider):
         self._scenario = scenario
 
     async def complete(
-        self, system_prompt: str, user_message: str, response_schema: Type[BaseModel] = None, response_model: Type[BaseModel] = None
+    self,
+    system_prompt: str,
+    user_message: str,
+    response_schema: type[BaseModel] | None = None,
+    response_model: type[BaseModel] | None = None,
     ) -> BaseModel:
-        fixes_map = {"high": _HIGH_FIXES, "mixed": _MIXED_FIXES, "gate": _GATE_FIXES}
-        fixes = fixes_map.get(self._scenario, _MIXED_FIXES)
-        avg = sum(f.confidence_score for f in fixes) / max(len(fixes), 1)
+
+        from ..models import TroubleshootResponse
+        import uuid
+
+        if self._scenario == "high":
+            fixes = _HIGH_FIXES
+
+        elif self._scenario == "mixed":
+            fixes = _MIXED_FIXES
+
+        elif self._scenario == "gate":
+            fixes = _GATE_FIXES
+
+        else:
+            fixes = _MIXED_FIXES
+
+        overall_confidence = (
+            sum(f.confidence_score for f in fixes) / len(fixes)
+            if fixes else 0.0
+        )
 
         return TroubleshootResponse(
-            session_id="mock-session-00000000",
-            root_cause="Mock root cause: CUDA version mismatch between toolkit and PyTorch build.",
+            session_id=str(uuid.uuid4()),
+            root_cause="[Mock] Deterministic mock response for testing.",
             suggested_fixes=fixes,
-            repair_script_available=True,
-            confidence=round(avg, 4),
-            disclaimer="AI-generated suggestions. Review carefully before executing.",
-            suppressed_fix_count=0,
+            repair_script_available=False,
+            confidence=overall_confidence,
         )
-    async def stream(self, system_prompt: str, user_message: str, response_schema=None, response_model=None):
-        """Stub stream — not used in tests, required by ABC."""
+
+    async def stream(
+        self,
+        system_prompt: str,
+        user_message: str,
+        response_schema: type[BaseModel] | None = None,
+        response_model: type[BaseModel] | None = None,
+    ) -> None:
         raise NotImplementedError("MockProvider does not support streaming")

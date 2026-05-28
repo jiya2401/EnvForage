@@ -8,25 +8,21 @@ Pipeline:
     5. Return structured TroubleshootResponse
 """
 import hashlib
+import json
 import logging
 import time
 import uuid
-from app.ai.prompts.system import LOW_CONFIDENCE_GATE, TROUBLESHOOT_SYSTEM_PROMPT
-from app.ai.providers.base import LLMProvider
 from collections.abc import AsyncIterator
 from datetime import datetime
-from app.ai.models import SuggestedFix, TroubleshootRequest, TroubleshootResponse
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.models import (
-    TroubleshootRequest,
-    TroubleshootResponse,
-)
-from app.ai.prompts.system import TROUBLESHOOT_SYSTEM_PROMPT
+from app.ai.models import SuggestedFix, TroubleshootRequest, TroubleshootResponse
+from app.ai.prompts.system import LOW_CONFIDENCE_GATE, TROUBLESHOOT_SYSTEM_PROMPT
 from app.ai.prompts.troubleshoot import TroubleshootPromptBuilder
 from app.ai.providers import get_provider
-from app.ai.providers.base import LLMProviderError
+from app.ai.providers.base import LLMProvider, LLMProviderError
 from app.models.ai_session import AIAuditLog, AISession, AISuggestion
 from app.templates.safety import SafetyViolationError, validate_rendered_output
 
@@ -83,7 +79,7 @@ class AITroubleshootService:
         logger.info("Troubleshoot prompt built (%d chars)", len(user_message))
 
         # ── Step 2: Call LLM ──────────────────────────────────────────────
-        provider = get_provider()
+        provider = self._provider if self._provider is not None else get_provider()
         provider_name = type(provider).__name__
         model_name = getattr(provider, "model", "unknown")
 
@@ -163,7 +159,7 @@ class AITroubleshootService:
         )
 
         return llm_result
-    
+
     def _gate_fixes(
         self, fixes: list[SuggestedFix], session_id: str
     ) -> tuple[list[SuggestedFix], int]:
@@ -213,7 +209,7 @@ class AITroubleshootService:
                 "CONFIDENCE_AUDIT session=%s suppressed_fixes=%d",
                 session_id, suppressed,
             )
-    
+
     async def stream_troubleshoot(
         self,
         request: TroubleshootRequest,
@@ -382,8 +378,8 @@ class AITroubleshootService:
             db.add(log)
         except Exception as exc:
             logger.error("Failed to write audit log: %s", exc)
-            
-    
+
+
 #confidence gating
 
     def _gate_fixes(
@@ -403,7 +399,7 @@ class AITroubleshootService:
                 accepted.append(fix)
         return accepted, suppressed
 
-    #Overall confidence recalculation 
+    #Overall confidence recalculation
 
     def _recalculate_overall_confidence(self, fixes: list[SuggestedFix]) -> float:
         """
@@ -421,7 +417,7 @@ class AITroubleshootService:
             total_w += w
         return round(weighted_sum / total_w, 4)
 
-    #Audit logging 
+    #Audit logging
 
     def _log_confidence_audit(
         self, session_id: str, fixes: list[SuggestedFix], suppressed: int

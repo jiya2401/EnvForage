@@ -1,11 +1,13 @@
 ﻿"""Unit tests for AITroubleshootService confidence gating."""
 import uuid
-import pytest
 from unittest.mock import AsyncMock, patch
-from app.ai.service import AITroubleshootService
-from app.ai.providers.mock import MockProvider
+
+import pytest
+
 from app.ai.models import FixConfidenceLevel, TroubleshootRequest
 from app.ai.prompts.system import LOW_CONFIDENCE_GATE
+from app.ai.providers.mock import MockProvider
+from app.ai.service import AITroubleshootService
 
 
 def _dummy_request():

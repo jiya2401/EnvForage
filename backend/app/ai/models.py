@@ -12,15 +12,14 @@ Changes (Confidence Scoring Issue):
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
-
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # Confidence primitives
 
-class FixConfidenceLevel(str, Enum):
+class FixConfidenceLevel(StrEnum):
     """
     HIGH   — Fix directly traceable to a known entry in the CompatibilityEngine
              matrix (CUDA ↔ driver ↔ framework). LLM is acting as lookup.
@@ -75,7 +74,7 @@ class SuggestedFix(BaseModel):
         default=None,
         description="What user should try if this fix fails. Required for LOW fixes.",
     )
-    
+
     @field_validator("uncertainty_reason")
     @classmethod
     def uncertainty_required_for_non_high(cls, v: str | None, info) -> str | None:
@@ -98,7 +97,7 @@ class SuggestedFix(BaseModel):
         if v is True and level != FixConfidenceLevel.HIGH:
             raise ValueError("is_matrix_backed=True requires confidence_level='high'")
         return v
-    
+
     @field_validator("confidence_score")
     @classmethod
     def score_consistent_with_level(cls, v: float, info) -> float:
@@ -113,10 +112,27 @@ class SuggestedFix(BaseModel):
             logger.warning("confidence_score %.2f high for LOW-level fix (expected <0.40)", v)
         return v
 
+    @model_validator(mode="after")
+    def score_required_if_level_set(self) -> SuggestedFix:
+        if self.confidence_level is not None and self.confidence_score is None:
+            raise ValueError(
+                "confidence_score is required when confidence_level is set"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def fallback_required_for_low(self) -> SuggestedFix:
+        if self.confidence_level == FixConfidenceLevel.LOW:
+            if not self.fallback_recommendation or not self.fallback_recommendation.strip():
+                raise ValueError(
+                    "fallback_recommendation is required when confidence_level='low'"
+                )
+        return self
+
 class TroubleshootRequest(BaseModel):
     diagnostic: dict
-    verification: dict = Field(default_factory=dict) 
-    profile: dict = Field(default_factory=dict)         
+    verification: dict = Field(default_factory=dict)
+    profile: dict = Field(default_factory=dict)
     profile_slug: str | None = None
     profile_name: str | None = None
     target_os: str | None = None
@@ -128,7 +144,7 @@ class TroubleshootRequest(BaseModel):
     repair_script_available: bool = False
     disclaimer: str = "AI-generated advisory. Review carefully before executing."
     suppressed_fix_count: int = 0
-    
+
 class TroubleshootResponse(BaseModel):
     session_id: str
     root_cause: str
@@ -136,4 +152,4 @@ class TroubleshootResponse(BaseModel):
     repair_script_available: bool = False
     confidence: float = Field(..., ge=0.0, le=1.0)
     disclaimer: str = "AI-generated advisory. Review carefully before executing."
-    suppressed_fix_count: int = 0    
+    suppressed_fix_count: int = 0

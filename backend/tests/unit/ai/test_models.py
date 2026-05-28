@@ -3,7 +3,6 @@ import pytest
 from pydantic import ValidationError
 
 from app.ai.models import (
-    FixConfidenceLevel,
     LLMResponseMeta,
     SuggestedFix,
     TroubleshootRequest,
