@@ -19,7 +19,7 @@ from datetime import datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError, OperationalError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.models import SuggestedFix, TroubleshootRequest, TroubleshootResponse
@@ -27,6 +27,7 @@ from app.ai.prompts.system import LOW_CONFIDENCE_GATE, TROUBLESHOOT_SYSTEM_PROMP
 from app.ai.prompts.troubleshoot import TroubleshootPromptBuilder
 from app.ai.providers import get_provider
 from app.ai.providers.base import LLMProvider, LLMProviderError
+from app.middleware.metrics import record_ai_token_usage
 from app.models.ai_session import AIAuditLog, AISession, AISuggestion
 from app.templates.safety import SafetyViolationError, validate_rendered_output
 
