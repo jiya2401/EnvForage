@@ -2,7 +2,7 @@
 
 import { motion, useScroll, useSpring, useTransform } from "framer-motion";
 import Link from "next/link";
-import { Download, CheckCircle2, User, Search, Sparkles, Package } from "lucide-react";
+import { Download, CheckCircle2, User, Search, Sparkles, Package, Terminal } from "lucide-react";
 
 export default function HomePage() {
   const { scrollYProgress, scrollY } = useScroll();
@@ -78,10 +78,30 @@ export default function HomePage() {
           alignItems: "center",
           zIndex: 1,
           padding: "4rem 0",
-          background: "var(--bg-primary)"
+          background: "transparent"
         }}
       >
-        <div className="container" style={{ maxWidth: "1200px" }}>
+        <div 
+          style={{ 
+            position: "absolute", 
+            top: "15%", 
+            right: "-2%",
+            transform: "rotate(15deg)", 
+            fontSize: "clamp(3rem, 6vw, 7rem)", 
+            fontWeight: 800, 
+            color: "var(--text-primary)", 
+            opacity: 0.06, 
+            whiteSpace: "nowrap", 
+            pointerEvents: "none", 
+            zIndex: 0,
+            fontFamily: "var(--font-mono)",
+            userSelect: "none"
+          }}
+        >
+          $ pip install envforge-agent
+        </div>
+
+        <div className="container" style={{ maxWidth: "1200px", position: "relative", zIndex: 2 }}>
           <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}>
             <h1
               style={{
@@ -97,13 +117,13 @@ export default function HomePage() {
               <span style={{ position: "relative", display: "inline-block" }}>
                 dependency hell.
                 <span 
+                  className="highlight-strip"
                   style={{ 
                     position: "absolute", 
                     bottom: "10%", 
                     left: "-2%", 
                     right: "-2%", 
                     height: "40%", 
-                    background: "var(--brand-secondary)", 
                     zIndex: -1 
                   }}
                 />
@@ -158,7 +178,7 @@ export default function HomePage() {
                   transition: "all 0.2s ease",
                 }}
               >
-                Coming Soon
+                Downloads
               </Link>
             </div>
 
@@ -172,7 +192,9 @@ export default function HomePage() {
         style={{ 
           position: "relative", 
           zIndex: 10, 
-          background: "var(--bg-primary)",
+          backgroundColor: "var(--bg-core)",
+          backgroundImage: "radial-gradient(var(--border-subtle) 1px, transparent 1px)",
+          backgroundSize: "6px 6px",
           boxShadow: "0 -20px 50px rgba(0,0,0,0.05)",
         }}
       >
@@ -203,21 +225,61 @@ export default function HomePage() {
               </motion.div>
 
               <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }}>
-                <div style={{ background: "#0f172a", borderRadius: "16px", padding: "2.5rem", color: "#f8fafc", fontFamily: "var(--font-mono)", fontSize: "0.95rem", lineHeight: 1.7, boxShadow: "0 25px 50px -12px rgba(15, 23, 42, 0.25)" }}>
-                  <div style={{ display: "flex", gap: "8px", marginBottom: "2rem" }}>
-                    <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: "#ef4444" }} />
-                    <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: "var(--brand-secondary)" }} />
-                    <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: "#22c55e" }} />
+                <div style={{
+                  background: "rgba(10, 10, 15, 0.95)",
+                  border: "1px solid rgba(255, 255, 255, 0.05)",
+                  borderRadius: "16px",
+                  overflow: "hidden",
+                  boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+                  position: "relative"
+                }}>
+                  {/* Terminal Header */}
+                  <div style={{
+                    padding: "1rem 1.25rem",
+                    background: "rgba(18, 18, 25, 0.95)",
+                    borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between"
+                  }}>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: "#ef4444" }} />
+                      <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: "#f59e0b" }} />
+                      <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: "#10b981" }} />
+                    </div>
+                    <div style={{ fontFamily: "var(--font-mono)", fontSize: "0.8rem", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <Terminal size={14} color="var(--brand-primary)" />
+                      <span>envforge-agent</span>
+                    </div>
+                    <div style={{ width: "44px" }} />
                   </div>
-                  <p style={{ color: "#22c55e", marginBottom: "0.5rem" }}>$ envforage diagnose</p>
-                  <p style={{ color: "#94a3b8" }}>Scanning hardware configuration...</p>
-                  <p>✓ NVIDIA RTX 3090 detected</p>
-                  <p>✓ CUDA 12.1 compatible</p>
-                  <br />
-                  <p style={{ color: "#22c55e", marginBottom: "0.5rem" }}>$ envforage generate --pytorch 2.0</p>
-                  <p style={{ color: "#94a3b8" }}>Validating dependencies against matrix...</p>
-                  <p style={{ color: "#22c55e", marginTop: "1rem", marginBottom: "2rem" }}>✓ Environment ready!</p>
-                  <p>Generated setup script: <span style={{ color: "var(--brand-secondary)" }}>setup.sh</span></p>
+                  
+                  {/* Terminal Body */}
+                  <div style={{
+                    padding: "2rem 1.5rem",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: "0.9rem",
+                    lineHeight: 1.6,
+                    color: "var(--text-secondary)"
+                  }}>
+                    <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                      <span style={{ color: "var(--brand-accent)", fontWeight: "bold" }}>guest@envforge:~$</span>
+                      <span style={{ color: "var(--text-primary)" }}>pip install envforge-agent</span>
+                    </div>
+                    <div style={{ marginBottom: "1.5rem", color: "#94a3b8" }}>
+                      Successfully installed envforge-agent-1.0.1
+                    </div>
+                    
+                    <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem" }}>
+                      <span style={{ color: "var(--brand-accent)", fontWeight: "bold" }}>guest@envforge:~$</span>
+                      <span style={{ color: "var(--text-primary)" }}>envforge compile --profile="PyTorch" --os="LINUX" --python="3.10"</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                      <span style={{ color: "#3b82f6" }}>[network] Resolving repository endpoint...</span>
+                      <span style={{ color: "#a855f7" }}>[compiler] Resolving Python dependencies...</span>
+                      <span style={{ color: "#10b981", marginTop: "0.5rem", fontWeight: "bold" }}>[system] Compilation COMPLETED successfully.</span>
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             </div>

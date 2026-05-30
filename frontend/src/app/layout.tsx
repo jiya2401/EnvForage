@@ -49,7 +49,7 @@ export default function RootLayout({
                 storedTheme === "light" ||
                 storedTheme === "system"
                   ? storedTheme
-                  : "dark";
+                  : "light";
 
               if (theme === "system") {
                 const prefersDark =

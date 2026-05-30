@@ -30,7 +30,7 @@ export default function TerminalLoader({
   title = "EnvForage Environment Compiler",
 }: TerminalLoaderProps) {
   const [progress, setProgress] = useState(0);
-  const consoleEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Generate logs dynamic configuration
   const logSequence: LogItem[] = [
@@ -65,10 +65,10 @@ export default function TerminalLoader({
   // Derived logs visible based on progress
   const logs = logSequence.filter((item) => progress >= item.minProgress);
 
-  // Auto-scroll terminal logs
+  // Auto-scroll terminal logs inside its own container
   useEffect(() => {
-    if (consoleEndRef.current) {
-      consoleEndRef.current.scrollIntoView({ behavior: "smooth" });
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
   }, [logs.length]);
 
@@ -291,6 +291,7 @@ export default function TerminalLoader({
 
         {/* Terminal Body Console */}
         <div
+          ref={scrollContainerRef}
           style={{
             padding: "1.5rem",
             height: "320px",
@@ -353,7 +354,7 @@ export default function TerminalLoader({
               />
             </div>
           )}
-          <div ref={consoleEndRef} />
+          {/* removed consoleEndRef */}
         </div>
 
         {/* Progress Section */}
