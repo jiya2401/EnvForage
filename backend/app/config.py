@@ -16,10 +16,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
 
-# Extract the hardcoded dev sentinel into a single shared constant
 DEV_SECRET_KEY = "dev-secret-key-change-in-production"
-
-
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -51,7 +48,6 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins_list(self) -> list[str]:
-        """Return allowed origins split into a list of strings."""
         return [o.strip() for o in self.allowed_origins.split(",")]
 
     # ── AI / LLM ─────────────────────────────────────────────
@@ -73,20 +69,24 @@ class Settings(BaseSettings):
     rate_limit_ai_rpm: int = 10       # AI troubleshoot: requests per minute
     rate_limit_repair_rpm: int = 20   # Repair endpoint: requests per minute
     rate_limit_general_rpm: int = 60  # General API: requests per minute
-
     @model_validator(mode="after")
     def validate_secret_key(self) -> "Settings":
         """
         Validate that the default development secret key is not used in production.
         """
-        if self.environment == "production" and self.secret_key == DEV_SECRET_KEY:
+        if (
+            self.environment == "production"
+            and self.secret_key == DEV_SECRET_KEY
+        ):
             raise ValueError(
                 "Production environment requires a strong SECRET_KEY."
             )
         return self
 
-
 @lru_cache
 def get_settings() -> Settings:
-    """Return cached Settings singleton."""
+    """Return cached settings singleton."""
     return Settings()
+
+
+
