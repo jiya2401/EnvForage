@@ -117,6 +117,13 @@ def _detect_via_rocm_smi(timeout: int = 30) -> list[GPUInfo]:
             timeout=timeout,
         )
     except FileNotFoundError:
+        logger.debug("rocm-smi command not found in system path.")
+        return []
+    except subprocess.TimeoutExpired:
+        logger.debug("rocm-smi command timed out after %s seconds.", timeout)
+        return []
+    except (OSError, subprocess.SubprocessError) as e:
+        logger.debug("Unexpected error running rocm-smi: %s", e, exc_info=True)
         return []
 
     if result.returncode != 0:
@@ -133,16 +140,16 @@ def _detect_via_rocm_smi(timeout: int = 30) -> list[GPUInfo]:
     for card_key, info in data.items():
         if not card_key.startswith("card"):
             continue
-            
+
         name = info.get("Product Name", "AMD GPU")
         vram_raw = info.get("VRAM Total Memory (B)", "0")
         driver = info.get("Driver Version")
-        
+
         try:
             vram_gb = round(float(vram_raw) / (1024**3), 2) if vram_raw else None
         except (ValueError, TypeError):
             vram_gb = None
-            
+
         try:
             index = int(card_key.replace("card", ""))
         except ValueError:
