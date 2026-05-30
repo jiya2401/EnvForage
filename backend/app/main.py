@@ -26,6 +26,7 @@ from app.cache import get_redis_client
 from app.config import get_settings
 from app.core.handlers import register_exception_handlers
 from app.database import AsyncSessionLocal
+from app.middleware.payload_size import PayloadSizeLimitMiddleware
 
 
 @asynccontextmanager
@@ -57,8 +58,8 @@ def create_app() -> FastAPI:
     )
 
     register_exception_handlers(app)
-
     # ── CORS ─────────────────────────────────────────────────
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins_list,
@@ -66,6 +67,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(PayloadSizeLimitMiddleware)
 
     # ── Routers ───────────────────────────────────────────────
     app.include_router(profiles.router, prefix="/api/v1", tags=["profiles"])
