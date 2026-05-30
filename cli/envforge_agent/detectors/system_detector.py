@@ -7,10 +7,10 @@ Never raises — falls back to zeroes on any failure.
 from __future__ import annotations
 
 import platform
-
+import shutil
 import psutil
 
-from envforge_agent.schemas import CPUInfo, RAMInfo
+from envforge_agent.schemas import CPUInfo, RAMInfo, DISKInfo
 
 
 def detect_cpu() -> CPUInfo:
@@ -70,3 +70,25 @@ def _get_cpu_brand() -> str:
     # Universal fallback: platform.processor() (less specific but always available)
     brand = platform.processor()
     return brand if brand else "Unknown CPU"
+
+def detect_disk() -> DISKInfo:
+    """
+    Detect available disk space using shutil.
+
+    Returns:
+        DISKInfo with total_gb and available_gb (rounded to 2 decimal places).
+        Falls back to zeroes on any failure.
+    """
+    try:
+        import os
+        if platform.system() == "Windows":
+            root_path = os.environ.get("SystemDrive", "C:") + "\\"
+        else:
+            root_path = "/"
+
+        usage = shutil.disk_usage(root_path)
+        total_gb = round(usage.total / (1024 ** 3), 2)
+        free_gb = round(usage.free / (1024 ** 3), 2)
+        return DISKInfo(total_gb=total_gb, available_gb=free_gb)
+    except Exception:
+        return DISKInfo(total_gb=0.0, available_gb=0.0)

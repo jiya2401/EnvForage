@@ -2,9 +2,9 @@
 envforge CLI — main command group and subcommands.
 
 Commands:
-  envforge diagnose   Collect and display a DiagnosticReport
+  envforge diagnose    Collect and display a DiagnosticReport
   envforge verify     Check if a profile is compatible with this system
-  envforge fix        Generate a repair script from a saved report
+  envforge fix         Generate a repair script from a saved report
   envforge rollback   Restore a venv from a backup directory
 """
 
@@ -14,8 +14,10 @@ import json
 import sys
 import platform
 from pathlib import Path
+import asyncio
 
 import click
+import asyncio
 import httpx
 from rich.console import Console
 from rich.panel import Panel
@@ -34,6 +36,14 @@ console = Console()
 err_console = Console(stderr=True, style="bold red")
 
 
+def _reinit_consoles(no_color: bool) -> None:
+    """Reinitialise global consoles with no-color mode if requested."""
+    global console, err_console
+    if no_color:
+        console = Console(no_color=True, highlight=False)
+        err_console = Console(stderr=True, no_color=True, highlight=False)
+
+
 def check_macos_support():
     if platform.system() == "Darwin":
         err_console.print("[ERROR] EnvForge is not currently supported on macOS.")
@@ -46,8 +56,18 @@ def check_macos_support():
 
 @click.group()
 @click.version_option(__version__, prog_name="envforge-agent")
-def cli() -> None:
+@click.option(
+    "--no-color",
+    is_flag=True,
+    default=False,
+    envvar="NO_COLOR",
+    help="Disable colour and Rich markup in all output. Useful for CI pipelines.",
+)
+@click.pass_context
+def cli(ctx: click.Context, no_color: bool) -> None:
     """EnvForge CLI Diagnostic Agent — inspect your ML environment."""
+    ctx.ensure_object(dict)
+    _reinit_consoles(no_color)
     check_macos_support()
 
 
@@ -88,7 +108,15 @@ def cli() -> None:
     default=False,
     help="Output diagnostics in SARIF 2.1.0 format for CI/CD pipeline integrations.",
 )
-
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["json", "yaml"], case_sensitive=False),
+    default="json",
+    show_default=True,
+    help="Output format for the diagnostic report (json, yaml).",
+)
 @click.option(
     "--timeout", "-t",
     type=int,
@@ -96,13 +124,15 @@ def cli() -> None:
     show_default=True,
     help="Timeout in seconds for each detector subprocess call. Default: 30s.",
 )
+def diagnose(output: str | None, send: bool, api_url: str, quiet: bool, sarif: bool, timeout: int, output_format: str = "json") -> None:
+    asyncio.run(_diagnose(output, send, api_url, quiet, sarif, timeout, output_format))
 
-def diagnose(output: str | None, send: bool, api_url: str, quiet: bool, sarif: bool, timeout: int) -> None:
+def diagnose(output: str | None, send: bool, api_url: str, quiet: bool, sarif: bool, timeout: int, output_format: str) -> None:
+    asyncio.run(_diagnose(output, send, api_url, quiet, sarif, timeout, output_format))
+
+async def _diagnose(output: str | None, send: bool, api_url: str, quiet: bool, sarif: bool, timeout: int, output_format: str) -> None:
     """
     Collect a full diagnostic report of this machine's ML environment.
-
-    Detects: OS, CPU, RAM, GPU, CUDA, cuDNN, Python installations.
-    Outputs: DiagnosticReport JSON compatible with POST /api/v1/diagnose.
     """
     if not quiet:
         console.print(
@@ -125,20 +155,29 @@ def diagnose(output: str | None, send: bool, api_url: str, quiet: bool, sarif: b
         click.echo(_json.dumps(report.to_sarif(), indent=2))
         return
 
-    report_json = report.to_json(indent=2)
+    if send and output_format != "json":
+        err_console.print(f"[ERROR] --send requires JSON; --format {output_format} is incompatible.")
+        err_console.print("  Hint: Remove --format or drop --send.")
+        sys.exit(1)
+
+    if output_format == "yaml":
+        import yaml
+        report_output = yaml.dump(report.model_dump(mode='json'), default_flow_style=False, sort_keys=False)
+    else:
+        report_output = report.to_json(indent=2)
 
     # ── Output to file ──────────────────────────────────────────────────────
     if output:
-        Path(output).write_text(report_json, encoding="utf-8")
+        Path(output).write_text(report_output, encoding="utf-8")
         if not quiet:
             console.print(f"\n[green][+][/] Report saved to [bold]{output}[/]")
     elif not send:
         # Print JSON to stdout (pipe-friendly)
-        click.echo(report_json)
+        click.echo(report_output)
 
     # ── Send to API ─────────────────────────────────────────────────────────
     if send:
-        _send_report(report, api_url, quiet)
+        await _send_report(report, api_url, quiet)
 
 
 def _print_report_summary(report: DiagnosticReport) -> None:
@@ -162,6 +201,13 @@ def _print_report_summary(report: DiagnosticReport) -> None:
     elif report.ram.total_gb < 16:
         ram_str += "  [yellow][!] WARNING: Under 16 GB — some ML profiles may be slow[/]"
     table.add_row("RAM", ram_str)
+
+    disk_str = f"{report.disk.available_gb:.1f} GB free of {report.disk.total_gb:.1f} GB"
+    if report.disk.available_gb < 5:
+        disk_str += "  [bold red]⚠ CRITICAL: Under 5 GB — setup will likely fail[/]"
+    elif report.disk.available_gb < 20:
+        disk_str += "  [yellow]⚠ WARNING: Low disk space — GPU profiles need 20+ GB[/]"
+    table.add_row("Disk Free", disk_str)
 
     if report.gpus:
         for gpu in report.gpus:
@@ -209,19 +255,20 @@ def _print_report_summary(report: DiagnosticReport) -> None:
     console.print(table)
 
 
-def _send_report(report: DiagnosticReport, api_url: str, quiet: bool) -> None:
+async def _send_report(report: DiagnosticReport, api_url: str, quiet: bool) -> None:
     """POST the DiagnosticReport to the EnvForge API."""
     url = f"{api_url.rstrip('/')}/api/v1/diagnose"
     if not quiet:
         console.print(f"\n[bold]Sending report to[/] {url} ...")
 
     try:
-        response = httpx.post(
-            url,
-            content=report.to_json(),
-            headers={"Content-Type": "application/json"},
-            timeout=30,
-        )
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                url,
+                content=report.to_json(),
+                headers={"Content-Type": "application/json"},
+                timeout=30,
+            )
         response.raise_for_status()
         result = response.json()
 
@@ -386,7 +433,10 @@ def verify(profile: str | None, output: str | None, quiet: bool) -> None:
         if not quiet:
             _print_verification_summary(data, is_gpu_profile=is_gpu_profile)
 
-        res = {"status": "PASS", "message": msg}
+        res = {
+            "status": "PASS",
+            "message": msg
+        }
         click.echo(json.dumps(res, indent=2))
         sys.exit(0)
 
@@ -457,7 +507,7 @@ def _print_verification_summary(data: dict, is_gpu_profile: bool) -> None:
 @click.option(
     "--report",
     "-r",
-    type=click.Path(exists=True, dir_okay=False, readable=True),
+    type=click.Path(dir_okay=False, readable=True),
     required=True,
     help="Path to a saved DiagnosticReport JSON file.",
 )
@@ -480,6 +530,9 @@ def _print_verification_summary(data: dict, is_gpu_profile: bool) -> None:
     help="Preview the names of the scripts and resolved packages without printing their full contents.",
 )
 def fix(report: str, profile: str, api_url: str, dry_run: bool) -> None:
+    asyncio.run(_fix(report, profile, api_url, dry_run))
+
+async def _fix(report: str, profile: str, api_url: str, dry_run: bool) -> None:
     """
     Generate a repair script based on a saved diagnostic report.
 
@@ -508,7 +561,8 @@ def fix(report: str, profile: str, api_url: str, dry_run: bool) -> None:
     }
 
     try:
-        response = httpx.post(url, json=payload, timeout=30)
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, json=payload, timeout=30)
         response.raise_for_status()
         result = response.json()
 
@@ -541,7 +595,10 @@ def fix(report: str, profile: str, api_url: str, dry_run: bool) -> None:
         sys.exit(1)
 
 cli.add_command(audit_command)
+
+
 # ── envforge rollback ──────────────────────────────────────────────────────────
+
 
 @cli.command("rollback")
 def rollback() -> None:
@@ -627,10 +684,10 @@ def rollback() -> None:
             original_path.rename(temp_original)
 
         shutil.copytree(chosen, original)
-        
+
         if temp_original and temp_original.exists():
             shutil.rmtree(temp_original)
-            
+
         console.print(f"\n[green][+][/] Rollback complete. '[bold]{original}[/]' restored from '[bold]{chosen}[/]'")
 
     except Exception as e:
@@ -645,7 +702,11 @@ def rollback() -> None:
             shutil.rmtree(original_path, ignore_errors=True)
         err_console.print(f"[ERROR] Rollback failed: {e}")
         sys.exit(1)
-    
+
+
+# ── envforge troubleshoot ──────────────────────────────────────────────────────
+
+
 @cli.command("troubleshoot")
 @click.option(
     "--api-url",
@@ -654,13 +715,14 @@ def rollback() -> None:
     envvar="ENVFORGE_API_URL",
     help="Base URL of the EnvForge API.",
 )
-
 def troubleshoot(api_url: str) -> None:
+    asyncio.run(_troubleshoot(api_url))
+
+async def _troubleshoot(api_url: str) -> None:
     """
     Send diagnostic report to AI troubleshoot endpoint
     and stream analysis results live to terminal.
     """
-
     console.print(Panel(
         "[bold cyan]EnvForge AI Troubleshooter[/]\n"
         "[dim]Analyzing environment issues...[/]",
@@ -669,158 +731,208 @@ def troubleshoot(api_url: str) -> None:
 
     # Build diagnostic report
     report = ReportBuilder().build()
-
     url = f"{api_url.rstrip('/')}/api/v1/troubleshoot"
 
     console.print(f"\n[bold]Connecting to[/] {url}\n")
 
     try:
-        with httpx.stream(
-            "POST",
-            url,
-            json={
-                "diagnostic": report.model_dump(),
-                "user_description": "CLI troubleshoot request"
-            },
-            headers={
-                "Accept": "text/event-stream",
-            },
-            timeout=60,
-        ) as response:
+        async with httpx.AsyncClient() as client:
+            async with client.stream(
+                "POST",
+                url,
+                json={
+                    "diagnostic": report.model_dump(),
+                    "user_description": "CLI troubleshoot request"
+                },
+                headers={
+                    "Accept": "text/event-stream",
+                },
+                timeout=60,
+            ) as response:
 
-            response.raise_for_status()
+                response.raise_for_status()
 
-            console.print("[bold green]AI Troubleshooting Analysis[/]\n")
+                console.print("[bold green]AI Troubleshooting Analysis[/]\n")
 
-            # Buffer streamed chunks
-            buffer = ""
+                # Buffer streamed chunks
+                buffer = ""
 
-            for line in response.iter_lines():
+                async for line in response.aiter_lines():
 
-                if not line:
-                    continue
+                    if not line:
+                        continue
 
-                # SSE format: data: ...
-                if line.startswith("data: "):
+                    # SSE format: data: ...
+                    if line.startswith("data: "):
 
-                    chunk = line.removeprefix("data: ")
+                        chunk = line.removeprefix("data: ")
 
-                    # accumulate streamed fragments
-                    buffer += chunk
+                        # accumulate streamed fragments
+                        buffer += chunk
 
-            # Parse completed JSON after stream ends
             try:
-
                 parsed = json.loads(buffer)
 
                 if parsed.get("error"):
-
-                    err_console.print(
-                        f"[ERROR] {parsed.get('message', parsed['error'])}"
-                    )
-
+                    err_console.print(f"[ERROR] {parsed.get('message', parsed['error'])}")
                     sys.exit(1)
 
                 # Root Cause
                 console.print("\n[bold red]Root Cause:[/]")
-                console.print(
-                    parsed.get("root_cause", "Unknown")
-                )
+                console.print(parsed.get("root_cause", "Unknown"))
 
                 # Suggested Fixes
                 if parsed.get("suggested_fixes"):
-
-                    console.print(
-                        "\n[bold yellow]Suggested Fixes:[/]"
-                    )
-
+                    console.print("\n[bold yellow]Suggested Fixes:[/]")
                     for fix in parsed["suggested_fixes"]:
-
-                        console.print(
-                            f"\n[bold]{fix['step']}.[/] {fix['title']}"
-                        )
-
-                        console.print(
-                            f"   Severity: {fix['severity']}"
-                        )
-
-                        console.print(
-                            f"   {fix['description']}"
-                        )
+                        console.print(f"\n[bold]{fix['step']}.[/] {fix['title']}")
+                        console.print(f"   Severity: {fix['severity']}")
+                        console.print(f"   {fix['description']}")
 
                         if fix.get("safe_commands"):
-
                             console.print("   Commands:")
-
                             for cmd in fix["safe_commands"]:
-
-                                console.print(
-                                    f"    • {cmd}"
-                                )
+                                console.print(f"    • {cmd}")
 
                 # Confidence
                 if parsed.get("confidence") is not None:
+                    console.print(f"\n[bold cyan]Confidence:[/] {parsed['confidence']}")
 
-                    console.print(
-                        f"\n[bold cyan]Confidence:[/] "
-                        f"{parsed['confidence']}"
-                    )
-
-                console.print(
-                    "\n[bold green][+] Troubleshooting complete[/]"
-                )
+                console.print("\n[bold green][+] Troubleshooting complete[/]")
 
             except json.JSONDecodeError:
-
-                err_console.print(
-                    "[ERROR] Failed to parse streamed AI response."
-                )
-
+                err_console.print("[ERROR] Failed to parse streamed AI response.")
                 sys.exit(1)
 
     except httpx.ConnectError:
-
-        err_console.print(
-            f"[ERROR] Cannot connect to {url}"
-        )
-
-        err_console.print(
-            "Hint: Make sure the EnvForge backend API is running."
-        )
-
+        err_console.print(f"[ERROR] Cannot connect to {url}")
+        err_console.print("Hint: Make sure the EnvForge backend API is running.")
         sys.exit(1)
-
     except httpx.HTTPStatusError as exc:
-
-        err_console.print(
-            f"[ERROR] API returned {exc.response.status_code}"
-        )
-
+        err_console.print(f"[ERROR] API returned {exc.response.status_code}")
         try:
-
             error_text = exc.response.read().decode()
-
             err_console.print(error_text)
-
         except Exception:
-
-            err_console.print(
-                "[ERROR] Unable to read error response body."
-            )
-
+            err_console.print("[ERROR] Unable to read error response body.")
         sys.exit(1)
-
     except KeyboardInterrupt:
-
-        err_console.print(
-            "\n[!] Troubleshooting interrupted by user."
-        )
-
+        err_console.print("\n[!] Troubleshooting interrupted by user.")
         sys.exit(1)
-
     except Exception as exc:
-
-        err_console.print(
-            f"[ERROR] Unexpected error: {exc}"
-        )
+        err_console.print(f"[ERROR] Unexpected error: {exc}")
         sys.exit(1)
+
+
+# ── envforge list ──────────────────────────────────────────────────────────────
+
+
+@cli.command("list")
+@click.option(
+    "--api-url",
+    default="http://localhost:8000",
+    show_default=True,
+    envvar="ENVFORGE_API_URL",
+    help="Base URL of the EnvForge API.",
+)
+@click.option(
+    "--quiet", "-q", is_flag=True, default=False,
+    help="Suppress all output except the JSON profile list.",
+)
+@click.option(
+    "--filter", "-f", "filter_tag",
+    default=None,
+    help="Filter profiles by tag (e.g. cuda, cpu, diffusion).",
+)
+def list_profiles(api_url: str, quiet: bool, filter_tag: str | None) -> None:
+    """
+    List all available environment profiles from the EnvForge API.
+
+    Fetches from GET /api/v1/profiles and displays a formatted summary table.
+    Use --filter to narrow results by tag.
+    """
+    url = f"{api_url.rstrip('/')}/api/v1/profiles"
+
+    if not quiet:
+        console.print(Panel(
+            f"[bold cyan]EnvForge Profile Registry[/] v{__version__}\n"
+            "[dim]Fetching available environment profiles...[/]",
+            expand=False,
+        ))
+
+    try:
+        profiles: list[dict] = []
+        page = 1
+        limit = 100
+
+        while True:
+            response = httpx.get(url, params={"page": page, "limit": limit}, timeout=15)
+            response.raise_for_status()
+            data = response.json()
+
+            page_profiles = data.get("profiles", []) if isinstance(data, dict) else data
+            if not isinstance(page_profiles, list):
+                err_console.print("[ERROR] Invalid profiles payload from API.")
+                sys.exit(1)
+
+            profiles.extend(page_profiles)
+
+            total = data.get("total") if isinstance(data, dict) else None
+            if not page_profiles or (isinstance(total, int) and len(profiles) >= total):
+                break
+            page += 1
+
+    except httpx.ConnectError:
+        err_console.print(f"[ERROR] Cannot connect to {url}")
+        err_console.print("  Hint: Is the EnvForge API running? Check ENVFORGE_API_URL.")
+        sys.exit(1)
+    except httpx.RequestError as e:
+        err_console.print(f"[ERROR] Request failed for {url}: {e}")
+        sys.exit(1)
+    except httpx.HTTPStatusError as e:
+        err_console.print(f"[ERROR] API returned {e.response.status_code}")
+        err_console.print(e.response.text)
+        sys.exit(1)
+    except ValueError:
+        err_console.print("[ERROR] API returned invalid JSON for /api/v1/profiles")
+        sys.exit(1)
+
+    if filter_tag:
+        profiles = [
+            p for p in profiles
+            if filter_tag.lower() in [t.lower() for t in p.get("tags", [])]
+        ]
+        if not profiles:
+            if quiet:
+                click.echo("[]")
+            else:
+                console.print(f"[yellow]No profiles matched tag:[/] {filter_tag}")
+            return
+
+    if quiet:
+        click.echo(json.dumps(profiles, indent=2))
+        return
+
+    _print_profiles_table(profiles, filter_tag)
+    console.print(
+        f"\n  [dim]{len(profiles)} profile(s) shown. "
+        f"Run [bold]envforge fix --profile <slug>[/] to generate a setup script.[/]"
+    )
+
+
+def _print_profiles_table(profiles: list, filter_tag: str | None) -> None:
+    table = Table(box=box.ROUNDED, show_header=True, padding=(0, 1), expand=False)
+    table.add_column("Slug", style="bold cyan", no_wrap=True)
+    table.add_column("Name", style="bold")
+    table.add_column("Tags", style="dim")
+    table.add_column("Description")
+
+    for profile in profiles:
+        if isinstance(profile, dict):
+            slug = profile.get("slug", "N/A")
+            name = profile.get("name", "Unknown")
+            tags = ", ".join(profile.get("tags", []))
+            desc = profile.get("description", "")
+            table.add_row(slug, name, tags, desc)
+
+    console.print(table)
