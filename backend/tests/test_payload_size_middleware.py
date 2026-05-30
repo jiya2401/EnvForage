@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.middleware.payload_size import MAX_PAYLOAD_BYTES
 
-client = TestClient(app)
+client = TestClient(app, raise_server_exceptions=False)
 
 VERIFY_URL = "/api/v1/verify"
 VALID_PROFILE_ID = "550e8400-e29b-41d4-a716-446655440000"
