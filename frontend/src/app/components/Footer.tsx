@@ -8,8 +8,6 @@ export default function Footer() {
       style={{
         marginTop: "4rem",
         padding: "5rem 0 2rem",
-        borderTop: "1px solid rgba(255,255,255,0.08)",
-        background: "linear-gradient(to bottom, rgba(255,255,255,0.02), rgba(255,255,255,0.01))",
       }}
     >
       <div
@@ -129,7 +127,7 @@ export default function Footer() {
         style={{
           marginTop: "4rem",
           paddingTop: "2rem",
-          borderTop: "1px solid rgba(255,255,255,0.06)",
+          borderTop: "1px solid var(--border-subtle)",
           textAlign: "center",
           color: "var(--text-muted)",
           fontSize: "0.9rem"

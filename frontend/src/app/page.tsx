@@ -46,14 +46,29 @@ export default function HomePage() {
       <div
         style={{
           position: "absolute",
-          width: "300px",
-          height: "300px",
+          width: "400px",
+          height: "400px",
           borderRadius: "999px",
-          background: "rgba(34,197,94,0.25)",
+          background: "rgba(34,197,94,0.15)",
           filter: "blur(120px)",
-          top: "-100px",
+          top: "-150px",
           left: "-100px",
-          animation: "float 6s ease-in-out infinite",
+          animation: "float 8s ease-in-out infinite",
+          zIndex: 0,
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          width: "500px",
+          height: "500px",
+          borderRadius: "999px",
+          background: "rgba(59,130,246,0.1)",
+          filter: "blur(150px)",
+          top: "100px",
+          right: "-200px",
+          animation: "float 10s ease-in-out infinite reverse",
+          zIndex: 0,
         }}
       />
       {/* Hero Section */}
@@ -130,12 +145,12 @@ export default function HomePage() {
                 style={{
                   padding: "1rem 2rem",
                   borderRadius: "16px",
-                  border: "1px solid rgba(255,255,255,0.1)",
+                  border: "1px solid var(--border-strong)",
                   color: "var(--text-primary)",
                   fontWeight: 600,
                   textDecoration: "none",
                   backdropFilter: "blur(10px)",
-                  background: "rgba(255,255,255,0.05)",
+                  background: "var(--bg-secondary)",
                   transition: "all 0.3s ease",
                 }}
               >
@@ -154,8 +169,8 @@ export default function HomePage() {
               style={{
                 padding: "2rem",
                 borderRadius: "24px",
-                background: "#0f172a",
-                border: "1px solid rgba(34,197,94,0.2)",
+                background: "var(--bg-tertiary)",
+                border: "1px solid var(--border-strong)",
                 fontFamily: "var(--font-jetbrains-mono), monospace",
                 boxShadow: "0 20px 50px rgba(0,0,0,0.5), 0 0 40px rgba(34,197,94,.15)",
                 fontSize: "0.95rem",
@@ -175,10 +190,10 @@ export default function HomePage() {
               <p style={{ color: "var(--text-primary)" }}>✓ NVIDIA GPU Compatible</p>
               <p style={{ color: "var(--text-primary)" }}>✓ Dependency Check Passed</p>
               <br />
-              <p style={{ color: "#06b6d4", marginBottom: "0.5rem" }}>
+              <p style={{ color: "var(--brand-primary)", marginBottom: "0.5rem", fontWeight: 600 }}>
                 ⚡ Generating Optimized Environment...
               </p>
-              <p style={{ color: "#94a3b8" }}>
+              <p style={{ color: "var(--text-secondary)" }}>
                 Profile: PyTorch CUDA 12.1
               </p>
               <br />
@@ -191,7 +206,7 @@ export default function HomePage() {
       </section>
 
       {/* Feature Grid Section */}
-      <section style={{ paddingTop: '6rem', paddingBottom: '6rem', background: 'rgba(255,255,255,0.02)' }}>
+      <section style={{ paddingTop: '6rem', paddingBottom: '6rem', background: 'var(--bg-secondary)' }}>
         <div className="container">
           <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true }} transition={{ duration: 0.6 }}>
             <h2 style={{ textAlign: 'center', fontSize: '3rem', marginBottom: '1rem', fontWeight: 700 }}>Built For Modern AI Development</h2>
@@ -221,11 +236,13 @@ export default function HomePage() {
                     whileHover={{ scale: 1.03, y: -5 }}
                     style={{
                       padding: "2.5rem",
-                      background: "rgba(255,255,255,0.03)",
-                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "var(--bg-primary)",
+                      border: "1px solid var(--border-subtle)",
                       borderRadius: "24px",
                       backdropFilter: "blur(10px)",
-                      boxShadow: "0 10px 40px rgba(0,0,0,0.2)",
+                      boxShadow: "var(--shadow-lg)",
+                      position: "relative",
+                      zIndex: 1,
                     }}
                   >
                     <Icon
@@ -286,7 +303,7 @@ export default function HomePage() {
                     <h4 style={{ marginBottom: '0.5rem', fontSize: '1.2rem', fontWeight: 600 }}>{step.title}</h4>
                     <p style={{ color: 'var(--text-secondary)', lineHeight: '1.6' }}>{step.desc}</p>
                   </div>
-                  {i < 3 && <div style={{ width: '2px', background: 'rgba(255,255,255,0.1)', margin: '-3rem 0 0 0', flexGrow: 1 }} />}
+                  {i < 3 && <div style={{ width: '2px', background: 'var(--border-strong)', margin: '-3rem 0 0 0', flexGrow: 1 }} />}
                 </motion.div>
               ))}
             </div>
@@ -307,8 +324,10 @@ export default function HomePage() {
               padding: '4rem 2rem',
               background: 'linear-gradient(135deg, rgba(34,197,94,0.1), rgba(59,130,246,0.1))',
               borderRadius: '32px',
-              border: '1px solid rgba(255,255,255,0.05)',
-              boxShadow: "0 20px 50px rgba(0,0,0,0.3)"
+              border: '1px solid var(--border-subtle)',
+              boxShadow: "var(--shadow-lg)",
+              position: "relative",
+              zIndex: 1,
             }}
           >
             <h2 style={{ fontSize: '3rem', marginBottom: '1.5rem', fontWeight: 800 }}>Ready to Forge Your Environment?</h2>
@@ -330,9 +349,9 @@ export default function HomePage() {
               <Link href="/troubleshoot" style={{
                 padding: '1rem 2.5rem',
                 borderRadius: '999px',
-                background: 'rgba(255,255,255,0.1)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                color: 'white',
+                background: 'transparent',
+                border: '1px solid var(--border-strong)',
+                color: 'var(--text-primary)',
                 fontWeight: 600,
                 textDecoration: 'none',
                 backdropFilter: 'blur(10px)',
