@@ -3,8 +3,14 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from app.middleware.rate_limit import InMemoryBackend, RateLimiter
+
+# Skip the entire Redis fallback test class if the redis package is not installed.
+redis_exceptions = pytest.importorskip("redis.exceptions", reason="redis package not installed")
+RedisConnError = redis_exceptions.ConnectionError
+RedisTimeout = redis_exceptions.TimeoutError
 
 
 @pytest.fixture
@@ -151,11 +157,6 @@ class TestRateLimiterRedisFallback:
     @pytest.mark.asyncio
     async def test_falls_back_on_connection_error(self):
         """ConnectionError from RedisBackend must not propagate — fallback is used."""
-        try:
-            from redis.exceptions import ConnectionError as RedisConnError
-        except ImportError:
-            pytest.skip("redis package not installed")
-
         mock_redis_backend = MagicMock()
         mock_redis_backend.is_allowed = AsyncMock(side_effect=RedisConnError("unreachable"))
 
@@ -168,11 +169,6 @@ class TestRateLimiterRedisFallback:
     @pytest.mark.asyncio
     async def test_falls_back_on_timeout_error(self):
         """TimeoutError from RedisBackend must not propagate — fallback is used."""
-        try:
-            from redis.exceptions import TimeoutError as RedisTimeout
-        except ImportError:
-            pytest.skip("redis package not installed")
-
         mock_redis_backend = MagicMock()
         mock_redis_backend.is_allowed = AsyncMock(side_effect=RedisTimeout("timed out"))
 
@@ -197,13 +193,6 @@ class TestRateLimiterRedisFallback:
     @pytest.mark.asyncio
     async def test_fallback_allows_request_through(self):
         """After a Redis failure the request must be allowed, not rejected with 429."""
-        try:
-            from redis.exceptions import ConnectionError as RedisConnError
-        except ImportError:
-            pytest.skip("redis package not installed")
-
-        from fastapi import HTTPException
-
         mock_redis_backend = MagicMock()
         mock_redis_backend.is_allowed = AsyncMock(side_effect=RedisConnError("down"))
 
