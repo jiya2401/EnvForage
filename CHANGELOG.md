@@ -18,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated `setup_windows.ps1.j2` to bootstrap `uv` via `Invoke-RestMethod` and conditionally use `uv pip install`.
   - Updated `setup_linux.sh.j2` to bootstrap `uv` via `curl` and conditionally use `uv pip install` across all install paths (CUDA, non-CUDA, CPU-only).
 
+### Fixed
+- **Rate Limiter Redis Fallback (`rate_limit.py`):**
+  - Redis `ConnectionError` or `TimeoutError` during `RedisBackend.is_allowed()` previously bubbled up as an unhandled exception, causing a **500 Internal Server Error** on every rate-limited endpoint while Redis was unreachable.
+  - `RateLimiter.__call__` now catches these errors, logs a `WARNING`, and transparently falls back to a shared `_fallback_backend` (`InMemoryBackend`) singleton so requests continue to be served.
+  - `redis.exceptions` is imported lazily to keep the module functional in InMemoryBackend-only deployments where the `redis` package is not installed.
+  - Non-Redis exceptions are re-raised so unrelated bugs are not silently swallowed.
+  - Added 4 unit tests in `test_rate_limit.py` covering `ConnectionError` fallback, `TimeoutError` fallback, non-Redis re-raise, and verifying the request is allowed (not 429) after fallback.
+
 ## [1.0.0] - 2026-05-22
 
 ### Added
