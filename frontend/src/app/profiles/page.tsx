@@ -9,6 +9,7 @@ import {
 	ShieldAlert,
 	SlidersHorizontal,
 	Terminal,
+	Star,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -23,7 +24,8 @@ export default function ProfilesPage() {
 	// Filter and search state
 	const [searchQuery, setSearchQuery] = useState("");
 	const [selectedOS, setSelectedOS] = useState("ALL");
-	const [cudaFilter, setCudaFilter] = useState("ALL"); // ALL, REQUIRED, OPTIONAL
+	const [cudaFilter, setCudaFilter] = useState("ALL");// ALL, REQUIRED, OPTIONAL
+	const [favorites, setFavorites] = useState<string[]>([]);
 
 	useEffect(() => {
 		async function loadProfiles() {
@@ -40,6 +42,25 @@ export default function ProfilesPage() {
 		}
 		loadProfiles();
 	}, []);
+	useEffect(() => {
+	const saved = localStorage.getItem("favoriteProfiles");
+
+	if (saved) {
+		setFavorites(JSON.parse(saved));
+	}
+}, []);
+const toggleFavorite = (slug: string) => {
+	const updated = favorites.includes(slug)
+		? favorites.filter((id) => id !== slug)
+		: [...favorites, slug];
+
+	setFavorites(updated);
+
+	localStorage.setItem(
+		"favoriteProfiles",
+		JSON.stringify(updated),
+	);
+};
 
 	// Filter profiles based on search and selected options
 	const filteredProfiles = profiles.filter((p) => {
@@ -337,6 +358,20 @@ export default function ProfilesPage() {
 											}}
 										>
 											<Box size={24} />
+											<button
+	onClick={() => toggleFavorite(p.slug)}
+	style={{
+		background: "transparent",
+		border: "none",
+		cursor: "pointer",
+		marginLeft: "10px",
+	}}
+>
+	<Star
+		size={20}
+		fill={favorites.includes(p.slug) ? "gold" : "none"}
+	/>
+</button>
 										</div>
 										<div style={{ display: "flex", gap: "0.5rem" }}>
 											{p.cuda_required ? (
