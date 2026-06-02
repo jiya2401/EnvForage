@@ -43,12 +43,14 @@ export default function ProfilesPage() {
 
 	// Filter profiles based on search and selected options
 	const filteredProfiles = profiles.filter((p) => {
+		const description = p.description ?? "";
+		const tags = p.tags ?? [];
+		const normalizedQuery = searchQuery.toLowerCase();
+
 		const matchesSearch =
-			p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-			p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-			p.tags.some((tag) =>
-				tag.toLowerCase().includes(searchQuery.toLowerCase()),
-			);
+			p.name.toLowerCase().includes(normalizedQuery) ||
+			description.toLowerCase().includes(normalizedQuery) ||
+			tags.some((tag) => tag.toLowerCase().includes(normalizedQuery));
 
 		const matchesOS =
 			selectedOS === "ALL" ||
@@ -222,7 +224,7 @@ export default function ProfilesPage() {
 						}}
 					>
 						<option value="ALL">All Operating Systems</option>
-						<option value="WINDOWS">Windows</option>
+						<option value="WIN">Windows</option>
 						<option value="LINUX">Linux</option>
 						<option value="WSL">WSL</option>
 					</select>
@@ -378,7 +380,7 @@ export default function ProfilesPage() {
 											minHeight: "4.5rem",
 										}}
 									>
-										{p.description}
+										{p.description ?? "No description available."}
 									</p>
 
 									{/* OS & Python specs */}
@@ -470,29 +472,30 @@ export default function ProfilesPage() {
 								</div>
 
 								<div style={{ display: "flex", gap: "1rem", width: "100%" }}>
-									<Link
-										href={`/profiles/${p.slug}`}
-										className="btn btn-secondary"
-										style={{ flex: 1, fontSize: "0.9rem", padding: "0.6rem 0" }}
-									>
-										Details
-									</Link>
-									<Link
-										href={`/generate?profile=${p.slug}`}
-										className="btn btn-primary"
-										style={{
-											flex: 1.5,
-											fontSize: "0.9rem",
-											padding: "0.6rem 0",
-											display: "flex",
-											gap: "0.4rem",
-											justifyContent: "center",
-											alignItems: "center",
-										}}
-									>
-										<Terminal size={14} />
-										Generate
-									</Link>
+									<motion.div
+  whileHover={{ scale: 1.05, y: -2 }}
+  whileTap={{ scale: 0.96 }}
+  style={{ flex: 1.5 }}
+>
+  <Link
+    href={`/generate?profile=${p.slug}`}
+    className="btn btn-primary"
+    style={{
+      width: "100%",
+      fontSize: "0.9rem",
+      padding: "0.6rem 0",
+      display: "flex",
+      gap: "0.4rem",
+      justifyContent: "center",
+      alignItems: "center",
+    }}
+  >
+    <motion.div whileHover={{ x: 3, rotate: 10 }}>
+      <Terminal size={14} />
+    </motion.div>
+    Generate
+  </Link>
+</motion.div>
 								</div>
 							</motion.div>
 						))}

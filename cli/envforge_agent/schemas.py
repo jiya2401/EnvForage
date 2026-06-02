@@ -88,6 +88,70 @@ class DiagnosticReport(BaseModel):
         """Serialize to JSON string (API-compatible)."""
         return self.model_dump_json(indent=indent)
 
+    def to_markdown(self) -> str:
+        """Serialize diagnostic report to a Markdown-formatted string."""
+        lines = ["# EnvForge Diagnostic Report", ""]
+
+        lines += [
+            "## System",
+            f"- **OS**: {self.os.name} {self.os.version} ({self.os.architecture})",
+        ]
+        if self.os.wsl_version:
+            lines.append(f"- **WSL**: {self.os.wsl_version}")
+        lines += [
+            f"- **CPU**: {self.cpu.brand} — {self.cpu.cores}C / {self.cpu.threads}T",
+            f"- **RAM**: {self.ram.total_gb} GB total, {self.ram.available_gb} GB free",
+            f"- **Disk**: {self.disk.available_gb:.1f} GB free of {self.disk.total_gb:.1f} GB",
+            "",
+        ]
+
+        lines.append("## GPU")
+        if self.gpus:
+            for gpu in self.gpus:
+                vram = f"{gpu.vram_gb} GB" if gpu.vram_gb else "?"
+                driver = gpu.driver_version or "?"
+                lines.append(f"- **{gpu.name}**: {vram} VRAM, driver {driver}")
+        else:
+            lines.append("- No NVIDIA GPU detected")
+        lines.append("")
+
+        lines.append("## CUDA")
+        if self.cuda.version:
+            lines.append(f"- **Version**: {self.cuda.version}")
+            if self.cuda.cudnn_version:
+                lines.append(f"- **cuDNN**: {self.cuda.cudnn_version}")
+            if self.cuda.nccl_version:
+                lines.append(f"- **NCCL**: {self.cuda.nccl_version}")
+            if self.cuda.toolkit_path:
+                lines.append(f"- **Toolkit Path**: {self.cuda.toolkit_path}")
+        else:
+            lines.append("- Not detected")
+        lines.append("")
+
+        lines.append("## ROCm")
+        if self.rocm.version:
+            gcn = f" (GCN {self.rocm.gcn_arch})" if self.rocm.gcn_arch else ""
+            lines.append(f"- **Version**: {self.rocm.version}{gcn}")
+        else:
+            lines.append("- Not detected")
+        lines.append("")
+
+        lines.append("## Python")
+        if self.active_python:
+            py = self.active_python
+            venv = " (venv)" if py.is_venv else ""
+            lines.append(f"- **Active**: {py.version} at `{py.path}`{venv}")
+        if len(self.python_installations) >= 1:
+            others = [
+                p for p in self.python_installations
+                if p.path != (self.active_python.path if self.active_python else "")
+            ]
+            if others:
+                lines.append("- **Others**: " + ", ".join(f"{p.version} (`{p.path}`)" for p in others[:3]))
+        lines.append("")
+
+        return "\n".join(lines)
+
     def to_sarif(self) -> dict:
         """Serialize diagnostic report to SARIF 2.1.0 format for CI/CD pipelines."""
         results = []

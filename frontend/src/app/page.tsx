@@ -228,7 +228,7 @@ export default function HomePage() {
 							Everything you need to eliminate dependency hell and focus on building AI.
 						</p>
 
-						<motion.div 
+						<motion.div
 							variants={containerVariants}
 							initial="hidden"
 							whileInView="show"
