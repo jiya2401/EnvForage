@@ -58,7 +58,7 @@ async def create_cuda_entry(data: CUDAMatrixCreate, db: DB) -> Any:
     db.add(db_entry)
     await db.commit()
     await db.refresh(db_entry)
-    clear_compatibility_cache()
+    await clear_compatibility_cache()
     return db_entry
 
 
@@ -76,12 +76,25 @@ async def update_cuda_entry(id: uuid.UUID, data: CUDAMatrixUpdate, db: DB) -> An
         )
 
     update_data = data.model_dump(exclude_unset=True)
+    if "cuda_version" in update_data:
+        existing = await db.execute(
+            select(CUDAMatrixEntry).where(
+                (CUDAMatrixEntry.cuda_version == update_data["cuda_version"])
+                & (CUDAMatrixEntry.id != id)
+            )
+        )
+        if existing.scalars().first():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="CUDA version already exists in matrix.",
+            )
+
     for key, val in update_data.items():
         setattr(db_entry, key, val)
 
     await db.commit()
     await db.refresh(db_entry)
-    clear_compatibility_cache()
+    await clear_compatibility_cache()
     return db_entry
 
 
@@ -100,7 +113,7 @@ async def delete_cuda_entry(id: uuid.UUID, db: DB) -> None:
 
     await db.delete(db_entry)
     await db.commit()
-    clear_compatibility_cache()
+    await clear_compatibility_cache()
 
 
 # ── ROCm Matrix CRUD ─────────────────────────────────────────────────────────
@@ -126,7 +139,7 @@ async def create_rocm_entry(data: RocmMatrixCreate, db: DB) -> Any:
     db.add(db_entry)
     await db.commit()
     await db.refresh(db_entry)
-    clear_compatibility_cache()
+    await clear_compatibility_cache()
     return db_entry
 
 
@@ -144,12 +157,25 @@ async def update_rocm_entry(id: uuid.UUID, data: RocmMatrixUpdate, db: DB) -> An
         )
 
     update_data = data.model_dump(exclude_unset=True)
+    if "rocm_version" in update_data:
+        existing = await db.execute(
+            select(RocmMatrixEntry).where(
+                (RocmMatrixEntry.rocm_version == update_data["rocm_version"])
+                & (RocmMatrixEntry.id != id)
+            )
+        )
+        if existing.scalars().first():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="ROCm version already exists in matrix.",
+            )
+
     for key, val in update_data.items():
         setattr(db_entry, key, val)
 
     await db.commit()
     await db.refresh(db_entry)
-    clear_compatibility_cache()
+    await clear_compatibility_cache()
     return db_entry
 
 
@@ -168,7 +194,7 @@ async def delete_rocm_entry(id: uuid.UUID, db: DB) -> None:
 
     await db.delete(db_entry)
     await db.commit()
-    clear_compatibility_cache()
+    await clear_compatibility_cache()
 
 
 # ── Python/Framework Matrix CRUD ─────────────────────────────────────────────
@@ -197,7 +223,7 @@ async def create_python_entry(data: PythonMatrixCreate, db: DB) -> Any:
     db.add(db_entry)
     await db.commit()
     await db.refresh(db_entry)
-    clear_compatibility_cache()
+    await clear_compatibility_cache()
     return db_entry
 
 
@@ -206,9 +232,7 @@ async def create_python_entry(data: PythonMatrixCreate, db: DB) -> Any:
     response_model=PythonMatrixResponse,
     summary="Update a Python/Framework compatibility matrix entry",
 )
-async def update_python_entry(
-    id: uuid.UUID, data: PythonMatrixUpdate, db: DB
-) -> Any:
+async def update_python_entry(id: uuid.UUID, data: PythonMatrixUpdate, db: DB) -> Any:
     db_entry = await db.get(PythonMatrixEntry, id)
     if not db_entry:
         raise HTTPException(
@@ -217,12 +241,28 @@ async def update_python_entry(
         )
 
     update_data = data.model_dump(exclude_unset=True)
+    if "framework" in update_data or "version" in update_data:
+        new_framework = update_data.get("framework", db_entry.framework)
+        new_version = update_data.get("version", db_entry.version)
+        existing = await db.execute(
+            select(PythonMatrixEntry).where(
+                (PythonMatrixEntry.framework == new_framework)
+                & (PythonMatrixEntry.version == new_version)
+                & (PythonMatrixEntry.id != id)
+            )
+        )
+        if existing.scalars().first():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Python matrix entry for this framework and version already exists.",
+            )
+
     for key, val in update_data.items():
         setattr(db_entry, key, val)
 
     await db.commit()
     await db.refresh(db_entry)
-    clear_compatibility_cache()
+    await clear_compatibility_cache()
     return db_entry
 
 
@@ -241,4 +281,4 @@ async def delete_python_entry(id: uuid.UUID, db: DB) -> None:
 
     await db.delete(db_entry)
     await db.commit()
-    clear_compatibility_cache()
+    await clear_compatibility_cache()

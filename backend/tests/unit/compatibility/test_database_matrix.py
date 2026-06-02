@@ -1,27 +1,42 @@
 """Unit tests for database-backed compatibility matrix and sync service."""
 
-import uuid
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 from httpx import ASGITransport, AsyncClient
-from unittest.mock import AsyncMock, MagicMock, patch
 from sqlalchemy import select
 
+from app.compatibility.models import PackageConstraint
+from app.compatibility.resolver import (
+    _CACHE_CUDA,
+    CompatibilityResolver,
+    clear_compatibility_cache,
+)
 from app.database import get_db
 from app.main import app
-from app.api.deps import require_admin
-from app.compatibility.models import PackageConstraint
-from app.compatibility.resolver import CompatibilityResolver, clear_compatibility_cache, _CACHE_CUDA
-from app.services.sync_service import seed_compatibility_matrices, sync_pypi_releases, sync_nvidia_cuda_releases
-from app.models.matrix import CUDAMatrixEntry, RocmMatrixEntry, PythonMatrixEntry
+from app.models.matrix import CUDAMatrixEntry, PythonMatrixEntry, RocmMatrixEntry
+from app.services.sync_service import (
+    seed_compatibility_matrices,
+    sync_nvidia_cuda_releases,
+    sync_pypi_releases,
+)
 
 pytestmark = pytest.mark.asyncio
 
 ADMIN_HEADERS = {"X-Admin-API-Key": "test-admin-key-for-ci"}
 
 
+@pytest.fixture(autouse=True)
+async def auto_clear_cache():
+    await clear_compatibility_cache()
+    yield
+    await clear_compatibility_cache()
+
+
 @pytest.fixture
 async def client(db_session_factory):
     """Provide an AsyncClient for testing FastAPI routes, overriding the DB dependency."""
+
     async def _get_db_override():
         async with db_session_factory() as session:
             yield session
@@ -87,6 +102,7 @@ async def test_resolver_with_db_and_fallback(db_session):
     assert res_static.packages[0].version == "2.1.2"
 
     # 3. Resolve with failing db (exception thrown during queries)
+    await clear_compatibility_cache()
     mock_db = AsyncMock()
     mock_db.execute.side_effect = Exception("DB Connection Lost")
     res_error_fallback = await resolver.resolve(
@@ -106,7 +122,7 @@ async def test_resolver_caching_and_clear(db_session):
     """Test matrix resolution cache operations."""
     await seed_compatibility_matrices(db_session)
     resolver = CompatibilityResolver()
-    clear_compatibility_cache()
+    await clear_compatibility_cache()
 
     assert "11.8" not in _CACHE_CUDA
 
@@ -116,7 +132,7 @@ async def test_resolver_caching_and_clear(db_session):
     assert _CACHE_CUDA["11.8"] is not None
 
     # Clear cache
-    clear_compatibility_cache()
+    await clear_compatibility_cache()
     assert "11.8" not in _CACHE_CUDA
 
 
@@ -137,7 +153,9 @@ async def test_admin_matrix_crud_cuda(client, db_session):
     assert resp_unauth.status_code == 401
 
     # 2. Create - POST with auth
-    resp_create = await client.post("/api/v1/admin/matrix/cuda", json=cuda_data, headers=ADMIN_HEADERS)
+    resp_create = await client.post(
+        "/api/v1/admin/matrix/cuda", json=cuda_data, headers=ADMIN_HEADERS
+    )
     assert resp_create.status_code == 201
     entry_id = resp_create.json()["id"]
 
@@ -148,12 +166,16 @@ async def test_admin_matrix_crud_cuda(client, db_session):
 
     # 4. Update - PUT
     update_data = {"min_driver_linux": "888.88"}
-    resp_update = await client.put(f"/api/v1/admin/matrix/cuda/{entry_id}", json=update_data, headers=ADMIN_HEADERS)
+    resp_update = await client.put(
+        f"/api/v1/admin/matrix/cuda/{entry_id}", json=update_data, headers=ADMIN_HEADERS
+    )
     assert resp_update.status_code == 200
     assert resp_update.json()["min_driver_linux"] == "888.88"
 
     # 5. Delete - DELETE
-    resp_delete = await client.delete(f"/api/v1/admin/matrix/cuda/{entry_id}", headers=ADMIN_HEADERS)
+    resp_delete = await client.delete(
+        f"/api/v1/admin/matrix/cuda/{entry_id}", headers=ADMIN_HEADERS
+    )
     assert resp_delete.status_code == 204
 
     # Verify deleted
@@ -172,7 +194,9 @@ async def test_admin_matrix_crud_rocm(client, db_session):
     }
 
     # 1. Create - POST
-    resp_create = await client.post("/api/v1/admin/matrix/rocm", json=rocm_data, headers=ADMIN_HEADERS)
+    resp_create = await client.post(
+        "/api/v1/admin/matrix/rocm", json=rocm_data, headers=ADMIN_HEADERS
+    )
     assert resp_create.status_code == 201
     entry_id = resp_create.json()["id"]
 
@@ -182,12 +206,16 @@ async def test_admin_matrix_crud_rocm(client, db_session):
 
     # 3. Update - PUT
     update_data = {"min_driver_linux": "88.8"}
-    resp_update = await client.put(f"/api/v1/admin/matrix/rocm/{entry_id}", json=update_data, headers=ADMIN_HEADERS)
+    resp_update = await client.put(
+        f"/api/v1/admin/matrix/rocm/{entry_id}", json=update_data, headers=ADMIN_HEADERS
+    )
     assert resp_update.status_code == 200
     assert resp_update.json()["min_driver_linux"] == "88.8"
 
     # 4. Delete - DELETE
-    resp_delete = await client.delete(f"/api/v1/admin/matrix/rocm/{entry_id}", headers=ADMIN_HEADERS)
+    resp_delete = await client.delete(
+        f"/api/v1/admin/matrix/rocm/{entry_id}", headers=ADMIN_HEADERS
+    )
     assert resp_delete.status_code == 204
 
 
@@ -204,7 +232,9 @@ async def test_admin_matrix_crud_python(client, db_session):
     }
 
     # 1. Create - POST
-    resp_create = await client.post("/api/v1/admin/matrix/python", json=python_data, headers=ADMIN_HEADERS)
+    resp_create = await client.post(
+        "/api/v1/admin/matrix/python", json=python_data, headers=ADMIN_HEADERS
+    )
     assert resp_create.status_code == 201
     entry_id = resp_create.json()["id"]
 
@@ -215,12 +245,18 @@ async def test_admin_matrix_crud_python(client, db_session):
 
     # 3. Update - PUT
     update_data = {"min_python": "3.12"}
-    resp_update = await client.put(f"/api/v1/admin/matrix/python/{entry_id}", json=update_data, headers=ADMIN_HEADERS)
+    resp_update = await client.put(
+        f"/api/v1/admin/matrix/python/{entry_id}",
+        json=update_data,
+        headers=ADMIN_HEADERS,
+    )
     assert resp_update.status_code == 200
     assert resp_update.json()["min_python"] == "3.12"
 
     # 4. Delete - DELETE
-    resp_delete = await client.delete(f"/api/v1/admin/matrix/python/{entry_id}", headers=ADMIN_HEADERS)
+    resp_delete = await client.delete(
+        f"/api/v1/admin/matrix/python/{entry_id}", headers=ADMIN_HEADERS
+    )
     assert resp_delete.status_code == 204
 
 
@@ -247,21 +283,22 @@ async def test_pypi_and_cuda_sync(db_session):
         mock_cuda.status_code = 200
         mock_cuda.text = mock_cuda_response
 
-        # Return mock responses sequentially: first PyPI calls, then CUDA call
-        mock_get.side_effect = [
-            mock_pypi,  # torch
-            mock_pypi,  # tensorflow
-            mock_pypi,  # jax
-            mock_pypi,  # diffusers
-            mock_cuda,  # nvidia cuda
-        ]
+        def get_side_effect(url, *args, **kwargs):
+            if "pypi.org" in url:
+                return mock_pypi
+            if "nvidia.com" in url:
+                return mock_cuda
+            return MagicMock(status_code=404)
+
+        mock_get.side_effect = get_side_effect
 
         await sync_pypi_releases(db_session)
         await sync_nvidia_cuda_releases(db_session)
 
     # Verify torch 3.0.0 was synced
     stmt = select(PythonMatrixEntry).where(
-        (PythonMatrixEntry.framework == "torch") & (PythonMatrixEntry.version == "3.0.0")
+        (PythonMatrixEntry.framework == "torch")
+        & (PythonMatrixEntry.version == "3.0.0")
     )
     res_torch = await db_session.execute(stmt)
     torch_entry = res_torch.scalars().first()

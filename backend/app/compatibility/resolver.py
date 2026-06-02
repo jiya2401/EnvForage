@@ -9,6 +9,7 @@ static matrix definitions.
 """
 
 import logging
+
 from packaging.specifiers import InvalidSpecifier, SpecifierSet
 from packaging.version import Version
 from sqlalchemy import select
@@ -20,31 +21,32 @@ from app.compatibility.errors import (
     UnsupportedOSError,
 )
 from app.compatibility.matrix.cuda import (
-    CUDA_MATRIX,
     get_cuda_entry,
 )
 from app.compatibility.matrix.os_rules import get_os_notes
 from app.compatibility.matrix.python import (
-    get_framework_entry,
     get_framework_versions,
 )
 from app.compatibility.matrix.rocm import (
-    ROCM_MATRIX,
     get_rocm_entry,
 )
 from app.compatibility.models import (
+    CUDAMatrixEntry,
+    FrameworkVersionEntry,
     OSTarget,
     PackageConstraint,
     ResolvedEnvironment,
     ResolvedPackage,
-    CUDAMatrixEntry,
     ROCMMatrixEntry,
-    FrameworkVersionEntry,
 )
 from app.models.matrix import (
     CUDAMatrixEntry as CUDAMatrixDBModel,
-    RocmMatrixEntry as RocmMatrixDBModel,
+)
+from app.models.matrix import (
     PythonMatrixEntry as PythonMatrixDBModel,
+)
+from app.models.matrix import (
+    RocmMatrixEntry as RocmMatrixDBModel,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,11 +57,28 @@ _CACHE_ROCM: dict[str, ROCMMatrixEntry | None] = {}
 _CACHE_FRAMEWORK: dict[str, list[FrameworkVersionEntry]] = {}
 
 
-def clear_compatibility_cache() -> None:
-    """Clear all in-memory compatibility matrix caches."""
+async def clear_compatibility_cache() -> None:
+    """Clear all in-memory and Redis compatibility matrix caches."""
     _CACHE_CUDA.clear()
     _CACHE_ROCM.clear()
     _CACHE_FRAMEWORK.clear()
+
+    try:
+        from app.cache import get_redis_client
+
+        redis = await get_redis_client()
+        if redis is not None:
+            cursor = 0
+            while True:
+                cursor, keys = await redis.scan(
+                    cursor, match="compatibility_resolver:v1:*", count=100
+                )
+                if keys:
+                    await redis.delete(*keys)
+                if cursor == 0:
+                    break
+    except Exception as exc:
+        logger.warning("Failed to clear Redis compatibility resolver cache: %s", exc)
 
 
 class CompatibilityResolver:
@@ -71,12 +90,16 @@ class CompatibilityResolver:
     with actionable messages — never bare strings.
     """
 
-    async def _get_cuda_entry(self, db: AsyncSession | None, version: str) -> CUDAMatrixEntry | None:
+    async def _get_cuda_entry(
+        self, db: AsyncSession | None, version: str
+    ) -> CUDAMatrixEntry | None:
         if db is not None:
             if version in _CACHE_CUDA:
                 return _CACHE_CUDA[version]
             try:
-                stmt = select(CUDAMatrixDBModel).where(CUDAMatrixDBModel.cuda_version == version)
+                stmt = select(CUDAMatrixDBModel).where(
+                    CUDAMatrixDBModel.cuda_version == version
+                )
                 result = await db.execute(stmt)
                 db_entry = result.scalars().first()
                 if db_entry:
@@ -94,15 +117,23 @@ class CompatibilityResolver:
                 _CACHE_CUDA[version] = entry
                 return entry
             except Exception as exc:
-                logger.warning("DB query for CUDA version %s failed, falling back to static: %s", version, exc)
+                logger.warning(
+                    "DB query for CUDA version %s failed, falling back to static: %s",
+                    version,
+                    exc,
+                )
         return get_cuda_entry(version)
 
-    async def _get_rocm_entry(self, db: AsyncSession | None, version: str) -> ROCMMatrixEntry | None:
+    async def _get_rocm_entry(
+        self, db: AsyncSession | None, version: str
+    ) -> ROCMMatrixEntry | None:
         if db is not None:
             if version in _CACHE_ROCM:
                 return _CACHE_ROCM[version]
             try:
-                stmt = select(RocmMatrixDBModel).where(RocmMatrixDBModel.rocm_version == version)
+                stmt = select(RocmMatrixDBModel).where(
+                    RocmMatrixDBModel.rocm_version == version
+                )
                 result = await db.execute(stmt)
                 db_entry = result.scalars().first()
                 if db_entry:
@@ -118,15 +149,23 @@ class CompatibilityResolver:
                 _CACHE_ROCM[version] = entry
                 return entry
             except Exception as exc:
-                logger.warning("DB query for ROCm version %s failed, falling back to static: %s", version, exc)
+                logger.warning(
+                    "DB query for ROCm version %s failed, falling back to static: %s",
+                    version,
+                    exc,
+                )
         return get_rocm_entry(version)
 
-    async def _get_framework_versions(self, db: AsyncSession | None, framework: str) -> list[FrameworkVersionEntry]:
+    async def _get_framework_versions(
+        self, db: AsyncSession | None, framework: str
+    ) -> list[FrameworkVersionEntry]:
         if db is not None:
             if framework in _CACHE_FRAMEWORK:
                 return _CACHE_FRAMEWORK[framework]
             try:
-                stmt = select(PythonMatrixDBModel).where(PythonMatrixDBModel.framework == framework)
+                stmt = select(PythonMatrixDBModel).where(
+                    PythonMatrixDBModel.framework == framework
+                )
                 result = await db.execute(stmt)
                 db_entries = result.scalars().all()
                 entries = [
@@ -144,10 +183,16 @@ class CompatibilityResolver:
                 _CACHE_FRAMEWORK[framework] = entries
                 return entries
             except Exception as exc:
-                logger.warning("DB query for framework %s failed, falling back to static: %s", framework, exc)
+                logger.warning(
+                    "DB query for framework %s failed, falling back to static: %s",
+                    framework,
+                    exc,
+                )
         return get_framework_versions(framework)
 
-    async def _get_framework_entry(self, db: AsyncSession | None, framework: str, version: str) -> FrameworkVersionEntry | None:
+    async def _get_framework_entry(
+        self, db: AsyncSession | None, framework: str, version: str
+    ) -> FrameworkVersionEntry | None:
         versions = await self._get_framework_versions(db, framework)
         for entry in versions:
             if entry.version == version:
@@ -165,6 +210,7 @@ class CompatibilityResolver:
             except Exception:
                 pass
         from app.compatibility.matrix.cuda import SUPPORTED_CUDA_VERSIONS
+
         return SUPPORTED_CUDA_VERSIONS
 
     async def _get_supported_rocm_versions(self, db: AsyncSession | None) -> list[str]:
@@ -178,6 +224,7 @@ class CompatibilityResolver:
             except Exception:
                 pass
         from app.compatibility.matrix.rocm import SUPPORTED_ROCM_VERSIONS
+
         return SUPPORTED_ROCM_VERSIONS
 
     async def resolve(
@@ -297,7 +344,9 @@ class CompatibilityResolver:
                 supported_os=os_support,
             )
 
-    async def _validate_cuda_version(self, db: AsyncSession | None, cuda_version: str) -> None:
+    async def _validate_cuda_version(
+        self, db: AsyncSession | None, cuda_version: str
+    ) -> None:
         entry = await self._get_cuda_entry(db, cuda_version)
         if entry is None:
             supported_cuda = await self._get_supported_cuda_versions(db)
@@ -307,7 +356,9 @@ class CompatibilityResolver:
                 known_versions=supported_cuda,
             )
 
-    async def _validate_rocm_version(self, db: AsyncSession | None, rocm_version: str) -> None:
+    async def _validate_rocm_version(
+        self, db: AsyncSession | None, rocm_version: str
+    ) -> None:
         entry = await self._get_rocm_entry(db, rocm_version)
         if entry is None:
             supported_rocm = await self._get_supported_rocm_versions(db)

@@ -6,6 +6,8 @@ import asyncio
 import logging
 import re
 import uuid
+from typing import Any
+
 import httpx
 from packaging.specifiers import SpecifierSet
 from packaging.version import Version
@@ -26,17 +28,17 @@ async def seed_compatibility_matrices(db: AsyncSession) -> None:
     result = await db.execute(select(CUDAMatrixEntry).limit(1))
     if not result.scalars().first():
         logger.info("[seed] Seeding CUDA compatibility matrix...")
-        for version, entry in CUDA_MATRIX.items():
+        for version, cuda_entry in CUDA_MATRIX.items():
             db.add(
                 CUDAMatrixEntry(
                     id=uuid.uuid4(),
                     cuda_version=version,
-                    min_driver_linux=entry.min_driver_linux,
-                    min_driver_windows=entry.min_driver_windows,
-                    cudnn_versions=entry.cudnn_versions,
-                    supported_archs=entry.supported_archs,
-                    notes=entry.notes,
-                    source_url=entry.source_url,
+                    min_driver_linux=cuda_entry.min_driver_linux,
+                    min_driver_windows=cuda_entry.min_driver_windows,
+                    cudnn_versions=cuda_entry.cudnn_versions,
+                    supported_archs=cuda_entry.supported_archs,
+                    notes=cuda_entry.notes,
+                    source_url=cuda_entry.source_url,
                 )
             )
 
@@ -44,15 +46,15 @@ async def seed_compatibility_matrices(db: AsyncSession) -> None:
     result = await db.execute(select(RocmMatrixEntry).limit(1))
     if not result.scalars().first():
         logger.info("[seed] Seeding ROCm compatibility matrix...")
-        for version, entry in ROCM_MATRIX.items():
+        for version, rocm_entry in ROCM_MATRIX.items():
             db.add(
                 RocmMatrixEntry(
                     id=uuid.uuid4(),
                     rocm_version=version,
-                    min_driver_linux=entry.min_driver_linux,
-                    supported_gpus=entry.supported_gpus,
-                    notes=entry.notes,
-                    source_url=entry.source_url or "",
+                    min_driver_linux=rocm_entry.min_driver_linux,
+                    supported_gpus=rocm_entry.supported_gpus,
+                    notes=rocm_entry.notes,
+                    source_url=rocm_entry.source_url or "",
                 )
             )
 
@@ -61,17 +63,17 @@ async def seed_compatibility_matrices(db: AsyncSession) -> None:
     if not result.scalars().first():
         logger.info("[seed] Seeding Python compatibility matrix...")
         for framework, entries in PYTHON_MATRIX.items():
-            for entry in entries:
+            for py_entry in entries:
                 db.add(
                     PythonMatrixEntry(
                         id=uuid.uuid4(),
                         framework=framework,
-                        version=entry.version,
-                        min_python=entry.min_python,
-                        max_python=entry.max_python,
-                        supported_cuda=entry.supported_cuda,
-                        supported_rocm=entry.supported_rocm,
-                        supported_python=entry.supported_python,
+                        version=py_entry.version,
+                        min_python=py_entry.min_python,
+                        max_python=py_entry.max_python,
+                        supported_cuda=py_entry.supported_cuda,
+                        supported_rocm=py_entry.supported_rocm,
+                        supported_python=py_entry.supported_python,
                     )
                 )
 
@@ -86,9 +88,9 @@ def parse_supported_python(requires_python: str | None) -> list[str]:
     try:
         spec = SpecifierSet(requires_python)
         supported = [v for v in all_py_versions if Version(v) in spec]
-        return supported if supported else all_py_versions
+        return supported
     except Exception:
-        return all_py_versions
+        return []
 
 
 async def sync_pypi_releases(db: AsyncSession) -> None:
@@ -100,7 +102,11 @@ async def sync_pypi_releases(db: AsyncSession) -> None:
                 url = f"https://pypi.org/pypi/{framework}/json"
                 response = await client.get(url)
                 if response.status_code != 200:
-                    logger.warning("Failed to fetch PyPI data for %s: %s", framework, response.status_code)
+                    logger.warning(
+                        "Failed to fetch PyPI data for %s: %s",
+                        framework,
+                        response.status_code,
+                    )
                     continue
 
                 data = response.json()
@@ -110,7 +116,9 @@ async def sync_pypi_releases(db: AsyncSession) -> None:
 
                 # Get all existing versions in database for this framework
                 db_result = await db.execute(
-                    select(PythonMatrixEntry).where(PythonMatrixEntry.framework == framework)
+                    select(PythonMatrixEntry).where(
+                        PythonMatrixEntry.framework == framework
+                    )
                 )
                 existing_versions = {e.version for e in db_result.scalars().all()}
 
@@ -144,13 +152,19 @@ async def sync_pypi_releases(db: AsyncSession) -> None:
                             rel_url = f"https://pypi.org/pypi/{framework}/{v_str}/json"
                             rel_resp = await client.get(rel_url)
                             if rel_resp.status_code == 200:
-                                requires_python = rel_resp.json().get("info", {}).get("requires_python")
+                                requires_python = (
+                                    rel_resp.json()
+                                    .get("info", {})
+                                    .get("requires_python")
+                                )
                         except Exception:
                             pass
 
                     supported_py = parse_supported_python(requires_python)
-                    min_py = supported_py[0] if supported_py else "3.8"
-                    max_py = supported_py[-1] if supported_py else "3.13"
+                    if not supported_py:
+                        continue
+                    min_py = supported_py[0]
+                    max_py = supported_py[-1]
 
                     # Heuristic for CUDA and ROCm support:
                     # Inherit from the closest previous version of the framework in the DB
@@ -167,7 +181,10 @@ async def sync_pypi_releases(db: AsyncSession) -> None:
                         best_match = prev_entries[0]
                         for entry in prev_entries:
                             try:
-                                if Version(entry.version).major == ver.major and Version(entry.version).minor == ver.minor:
+                                if (
+                                    Version(entry.version).major == ver.major
+                                    and Version(entry.version).minor == ver.minor
+                                ):
                                     best_match = entry
                                     break
                             except Exception:
@@ -191,11 +208,18 @@ async def sync_pypi_releases(db: AsyncSession) -> None:
                     new_entries += 1
 
                 if new_entries > 0:
-                    logger.info("Synced PyPI: Added %d new versions for %s", new_entries, framework)
+                    logger.info(
+                        "Synced PyPI: Added %d new versions for %s",
+                        new_entries,
+                        framework,
+                    )
                     await db.commit()
 
             except Exception as exc:
-                logger.warning("Failed to sync PyPI releases for %s: %s", framework, exc)
+                await db.rollback()
+                logger.warning(
+                    "Failed to sync PyPI releases for %s: %s", framework, exc
+                )
 
 
 async def sync_nvidia_cuda_releases(db: AsyncSession) -> None:
@@ -205,7 +229,10 @@ async def sync_nvidia_cuda_releases(db: AsyncSession) -> None:
         try:
             response = await client.get(url)
             if response.status_code != 200:
-                logger.warning("Failed to fetch NVIDIA CUDA release notes: %s", response.status_code)
+                logger.warning(
+                    "Failed to fetch NVIDIA CUDA release notes: %s",
+                    response.status_code,
+                )
                 return
 
             text = response.text
@@ -223,14 +250,38 @@ async def sync_nvidia_cuda_releases(db: AsyncSession) -> None:
                     continue
 
                 # Heuristic for new CUDA version driver requirements (based on latest existing version)
-                db_prev = await db.execute(
-                    select(CUDAMatrixEntry).order_by(CUDAMatrixEntry.cuda_version.desc()).limit(1)
+                db_prev = await db.execute(select(CUDAMatrixEntry))
+                cuda_rows = db_prev.scalars().all()
+                latest_existing = None
+                if cuda_rows:
+                    try:
+                        latest_existing = max(
+                            cuda_rows, key=lambda r: Version(r.cuda_version)
+                        )
+                    except Exception:
+                        latest_existing = cuda_rows[0]
+
+                min_linux = (
+                    latest_existing.min_driver_linux if latest_existing else "560.35.03"
                 )
-                latest_existing = db_prev.scalars().first()
-                min_linux = latest_existing.min_driver_linux if latest_existing else "560.35.03"
-                min_win = latest_existing.min_driver_windows if latest_existing else "560.94"
+                min_win = (
+                    latest_existing.min_driver_windows if latest_existing else "560.94"
+                )
                 cudnn = latest_existing.cudnn_versions if latest_existing else ["9.5.0"]
-                archs = latest_existing.supported_archs if latest_existing else ["sm_50", "sm_60", "sm_70", "sm_75", "sm_80", "sm_86", "sm_89", "sm_90"]
+                archs = (
+                    latest_existing.supported_archs
+                    if latest_existing
+                    else [
+                        "sm_50",
+                        "sm_60",
+                        "sm_70",
+                        "sm_75",
+                        "sm_80",
+                        "sm_86",
+                        "sm_89",
+                        "sm_90",
+                    ]
+                )
 
                 db.add(
                     CUDAMatrixEntry(
@@ -251,10 +302,11 @@ async def sync_nvidia_cuda_releases(db: AsyncSession) -> None:
                 await db.commit()
 
         except Exception as exc:
+            await db.rollback()
             logger.warning("Failed to sync NVIDIA CUDA releases: %s", exc)
 
 
-async def matrix_sync_loop(db_session_factory) -> None:
+async def matrix_sync_loop(db_session_factory: Any) -> None:
     """Infinite loop task running sync operations once every 24 hours."""
     logger.info("Compatibility matrix syncing background task started.")
     while True:

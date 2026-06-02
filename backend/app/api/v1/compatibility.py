@@ -7,7 +7,7 @@ Dynamically fetches from the database if available, falling back to static const
 from dataclasses import asdict
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi import APIRouter, HTTPException, Path
 from sqlalchemy import select
 
 from app.api.deps import DB
@@ -24,7 +24,11 @@ from app.compatibility.matrix.rocm import (
 )
 from app.models.matrix import (
     CUDAMatrixEntry as CUDAMatrixDBModel,
+)
+from app.models.matrix import (
     PythonMatrixEntry as PythonMatrixDBModel,
+)
+from app.models.matrix import (
     RocmMatrixEntry as RocmMatrixDBModel,
 )
 
@@ -49,41 +53,47 @@ async def get_compatibility_summary(db: DB) -> dict[str, Any]:
     Useful for frontend dropdowns and dynamic table headers.
     """
     # 1. CUDA Summary
+    cuda_entries = None
     try:
-        res = await db.execute(select(CUDAMatrixDBModel))
-        cuda_entries = res.scalars().all()
-        if cuda_entries:
-            cuda_versions = sorted({e.cuda_version for e in cuda_entries})
-            cuda_count = len(cuda_entries)
-        else:
-            raise ValueError()
+        cuda_res = await db.execute(select(CUDAMatrixDBModel))
+        cuda_entries = cuda_res.scalars().all()
     except Exception:
+        pass
+
+    if cuda_entries:
+        cuda_versions = sorted({e.cuda_version for e in cuda_entries})
+        cuda_count = len(cuda_entries)
+    else:
         cuda_versions = SUPPORTED_CUDA_VERSIONS
         cuda_count = len(CUDA_MATRIX)
 
     # 2. ROCm Summary
+    rocm_entries = None
     try:
-        res = await db.execute(select(RocmMatrixDBModel))
-        rocm_entries = res.scalars().all()
-        if rocm_entries:
-            rocm_versions = sorted({e.rocm_version for e in rocm_entries})
-            rocm_count = len(rocm_entries)
-        else:
-            raise ValueError()
+        rocm_res = await db.execute(select(RocmMatrixDBModel))
+        rocm_entries = rocm_res.scalars().all()
     except Exception:
+        pass
+
+    if rocm_entries:
+        rocm_versions = sorted({e.rocm_version for e in rocm_entries})
+        rocm_count = len(rocm_entries)
+    else:
         rocm_versions = SUPPORTED_ROCM_VERSIONS
         rocm_count = len(ROCM_MATRIX)
 
     # 3. Python/Framework Summary
+    python_entries = None
     try:
-        res = await db.execute(select(PythonMatrixDBModel))
-        python_entries = res.scalars().all()
-        if python_entries:
-            frameworks = sorted({e.framework for e in python_entries})
-            python_count = len(python_entries)
-        else:
-            raise ValueError()
+        python_res = await db.execute(select(PythonMatrixDBModel))
+        python_entries = python_res.scalars().all()
     except Exception:
+        pass
+
+    if python_entries:
+        frameworks = sorted({e.framework for e in python_entries})
+        python_count = len(python_entries)
+    else:
         frameworks = sorted(PYTHON_MATRIX.keys())
         python_count = sum(len(v) for v in PYTHON_MATRIX.values())
 
@@ -133,27 +143,29 @@ async def get_cuda_matrix(db: DB) -> dict[str, Any]:
     Each entry maps a CUDA version to its minimum required NVIDIA driver
     (Linux + Windows), supported cuDNN versions, and supported GPU architectures.
     """
+    cuda_entries = None
     try:
         res = await db.execute(select(CUDAMatrixDBModel))
         cuda_entries = res.scalars().all()
-        if cuda_entries:
-            data = {
-                e.cuda_version: {
-                    "cuda_version": e.cuda_version,
-                    "min_driver_linux": e.min_driver_linux,
-                    "min_driver_windows": e.min_driver_windows,
-                    "cudnn_versions": e.cudnn_versions,
-                    "supported_archs": e.supported_archs,
-                    "notes": e.notes or "",
-                    "source_url": e.source_url or "",
-                }
-                for e in cuda_entries
-            }
-            supported = sorted(data.keys())
-            count = len(cuda_entries)
-        else:
-            raise ValueError()
     except Exception:
+        pass
+
+    if cuda_entries:
+        data = {
+            e.cuda_version: {
+                "cuda_version": e.cuda_version,
+                "min_driver_linux": e.min_driver_linux,
+                "min_driver_windows": e.min_driver_windows,
+                "cudnn_versions": e.cudnn_versions,
+                "supported_archs": e.supported_archs,
+                "notes": e.notes or "",
+                "source_url": e.source_url or "",
+            }
+            for e in cuda_entries
+        }
+        supported = sorted(data.keys())
+        count = len(cuda_entries)
+    else:
         data = {version: asdict(entry) for version, entry in CUDA_MATRIX.items()}
         supported = SUPPORTED_CUDA_VERSIONS
         count = len(CUDA_MATRIX)
@@ -181,19 +193,21 @@ async def get_framework_cuda_support(db: DB) -> dict[str, Any]:
     Returns the framework → CUDA version support map.
     Shows which CUDA versions each framework version officially supports.
     """
+    entries = None
     try:
         res = await db.execute(select(PythonMatrixDBModel))
         entries = res.scalars().all()
-        if entries:
-            data: dict[str, dict[str, list[str]]] = {}
-            for e in entries:
-                if e.supported_cuda:
-                    if e.framework not in data:
-                        data[e.framework] = {}
-                    data[e.framework][e.version] = e.supported_cuda
-        else:
-            raise ValueError()
     except Exception:
+        pass
+
+    if entries:
+        data: dict[str, dict[str, list[str]]] = {}
+        for e in entries:
+            if e.supported_cuda:
+                if e.framework not in data:
+                    data[e.framework] = {}
+                data[e.framework][e.version] = e.supported_cuda
+    else:
         data = FRAMEWORK_CUDA_SUPPORT
 
     return {
@@ -228,7 +242,9 @@ async def get_cuda_version(
     """
     try:
         res = await db.execute(
-            select(CUDAMatrixDBModel).where(CUDAMatrixDBModel.cuda_version == cuda_version)
+            select(CUDAMatrixDBModel).where(
+                CUDAMatrixDBModel.cuda_version == cuda_version
+            )
         )
         entry = res.scalars().first()
         if entry:
@@ -291,25 +307,27 @@ async def get_rocm_matrix(db: DB) -> dict[str, Any]:
     Each entry maps a ROCm version to its minimum required Linux driver version
     and supported AMD GPU architectures.
     """
+    rocm_entries = None
     try:
         res = await db.execute(select(RocmMatrixDBModel))
         rocm_entries = res.scalars().all()
-        if rocm_entries:
-            data = {
-                e.rocm_version: {
-                    "rocm_version": e.rocm_version,
-                    "min_driver_linux": e.min_driver_linux,
-                    "supported_gpus": e.supported_gpus,
-                    "notes": e.notes or "",
-                    "source_url": e.source_url or "",
-                }
-                for e in rocm_entries
-            }
-            supported = sorted(data.keys())
-            count = len(rocm_entries)
-        else:
-            raise ValueError()
     except Exception:
+        pass
+
+    if rocm_entries:
+        data = {
+            e.rocm_version: {
+                "rocm_version": e.rocm_version,
+                "min_driver_linux": e.min_driver_linux,
+                "supported_gpus": e.supported_gpus,
+                "notes": e.notes or "",
+                "source_url": e.source_url or "",
+            }
+            for e in rocm_entries
+        }
+        supported = sorted(data.keys())
+        count = len(rocm_entries)
+    else:
         data = {version: asdict(entry) for version, entry in ROCM_MATRIX.items()}
         supported = SUPPORTED_ROCM_VERSIONS
         count = len(ROCM_MATRIX)
@@ -337,19 +355,21 @@ async def get_framework_rocm_support(db: DB) -> dict[str, Any]:
     Returns the framework → ROCm version support map.
     Shows which ROCm versions each framework version officially supports.
     """
+    entries = None
     try:
         res = await db.execute(select(PythonMatrixDBModel))
         entries = res.scalars().all()
-        if entries:
-            data: dict[str, dict[str, list[str]]] = {}
-            for e in entries:
-                if e.supported_rocm:
-                    if e.framework not in data:
-                        data[e.framework] = {}
-                    data[e.framework][e.version] = e.supported_rocm
-        else:
-            raise ValueError()
     except Exception:
+        pass
+
+    if entries:
+        data: dict[str, dict[str, list[str]]] = {}
+        for e in entries:
+            if e.supported_rocm:
+                if e.framework not in data:
+                    data[e.framework] = {}
+                data[e.framework][e.version] = e.supported_rocm
+    else:
         data = FRAMEWORK_ROCM_SUPPORT
 
     return {
@@ -384,7 +404,9 @@ async def get_rocm_version(
     """
     try:
         res = await db.execute(
-            select(RocmMatrixDBModel).where(RocmMatrixDBModel.rocm_version == rocm_version)
+            select(RocmMatrixDBModel).where(
+                RocmMatrixDBModel.rocm_version == rocm_version
+            )
         )
         entry = res.scalars().first()
         if entry:
@@ -444,29 +466,31 @@ async def get_python_matrix(db: DB) -> dict[str, Any]:
     Each framework maps to a list of versioned entries showing supported
     Python versions, CUDA versions, and ROCm versions.
     """
+    entries = None
     try:
         res = await db.execute(select(PythonMatrixDBModel))
         entries = res.scalars().all()
-        if entries:
-            frameworks = sorted({e.framework for e in entries})
-            data: dict[str, list[dict[str, Any]]] = {}
-            for e in entries:
-                if e.framework not in data:
-                    data[e.framework] = []
-                data[e.framework].append(
-                    {
-                        "framework": e.framework,
-                        "version": e.version,
-                        "min_python": e.min_python,
-                        "max_python": e.max_python,
-                        "supported_cuda": e.supported_cuda,
-                        "supported_rocm": e.supported_rocm,
-                        "supported_python": e.supported_python,
-                    }
-                )
-        else:
-            raise ValueError()
     except Exception:
+        pass
+
+    if entries:
+        frameworks = sorted({e.framework for e in entries})
+        data: dict[str, list[dict[str, Any]]] = {}
+        for e in entries:
+            if e.framework not in data:
+                data[e.framework] = []
+            data[e.framework].append(
+                {
+                    "framework": e.framework,
+                    "version": e.version,
+                    "min_python": e.min_python,
+                    "max_python": e.max_python,
+                    "supported_cuda": e.supported_cuda,
+                    "supported_rocm": e.supported_rocm,
+                    "supported_python": e.supported_python,
+                }
+            )
+    else:
         frameworks = sorted(PYTHON_MATRIX.keys())
         data = {
             framework: [asdict(entry) for entry in entries]
@@ -503,7 +527,9 @@ async def get_python_framework(
     """
     try:
         res = await db.execute(
-            select(PythonMatrixDBModel).where(PythonMatrixDBModel.framework == framework)
+            select(PythonMatrixDBModel).where(
+                PythonMatrixDBModel.framework == framework
+            )
         )
         entries = res.scalars().all()
         if entries:
@@ -593,16 +619,16 @@ async def get_python_framework_version(
                 & (PythonMatrixDBModel.version == version)
             )
         )
-        entry = res.scalars().first()
-        if entry:
+        db_entry = res.scalars().first()
+        if db_entry:
             return {
                 "framework": framework,
                 "version": version,
-                "min_python": entry.min_python,
-                "max_python": entry.max_python,
-                "supported_cuda": entry.supported_cuda,
-                "supported_rocm": entry.supported_rocm,
-                "supported_python": entry.supported_python,
+                "min_python": db_entry.min_python,
+                "max_python": db_entry.max_python,
+                "supported_cuda": db_entry.supported_cuda,
+                "supported_rocm": db_entry.supported_rocm,
+                "supported_python": db_entry.supported_python,
             }
     except Exception:
         pass
@@ -631,13 +657,15 @@ async def get_python_framework_version(
             },
         )
 
-    for entry in static_entries:
-        if entry.version == version:
-            return {"framework": framework, "version": version, **asdict(entry)}
+    for static_entry in static_entries:
+        if static_entry.version == version:
+            return {"framework": framework, "version": version, **asdict(static_entry)}
 
     try:
         res_ver = await db.execute(
-            select(PythonMatrixDBModel.version).where(PythonMatrixDBModel.framework == framework)
+            select(PythonMatrixDBModel.version).where(
+                PythonMatrixDBModel.framework == framework
+            )
         )
         avail = sorted(res_ver.scalars().all())
     except Exception:
