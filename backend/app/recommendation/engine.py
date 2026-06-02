@@ -7,10 +7,12 @@ based on detected hardware. No LLM calls — per AI_USAGE_POLICY.md.
 
 from __future__ import annotations
 
+from typing import Any
+
 from app.schemas.diagnostic import DiagnosticReportSchema
 
 
-def recommend_profiles(report: DiagnosticReportSchema) -> dict:
+def recommend_profiles(report: DiagnosticReportSchema) -> dict[str, Any]:
     """
     Analyze a diagnostic report and return recommended ML profiles with warnings.
 
@@ -20,7 +22,7 @@ def recommend_profiles(report: DiagnosticReportSchema) -> dict:
             - warnings: list[str]
     """
     warnings: list[str] = []
-    profiles: list[dict] = []
+    profiles: list[dict[str, Any]] = []
 
     has_gpu = len(report.gpus) > 0
     max_vram = _get_max_vram(report)
@@ -82,9 +84,10 @@ def recommend_profiles(report: DiagnosticReportSchema) -> dict:
             "rank": 2,
         })
     else:
+        vram_label = f"{max_vram:.1f} GB" if max_vram is not None else "unknown"
         profiles.append({
             "name": "tf-gpu",
-            "reason": f"High-VRAM GPU ({max_vram:.1f} GB) — TensorFlow GPU for large models",
+            "reason": f"High-VRAM GPU ({vram_label}) — TensorFlow GPU for large models",
             "rank": 1,
         })
         profiles.append({
