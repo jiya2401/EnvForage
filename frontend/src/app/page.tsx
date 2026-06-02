@@ -298,6 +298,8 @@ export default function HomePage() {
 						>
 							Get Started
 						</Link>
+						
+						
 					</div>
 				</section>
 			</div>
