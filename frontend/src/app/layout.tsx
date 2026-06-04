@@ -48,6 +48,11 @@ export const metadata: Metadata = {
 		siteName: "EnvForage",
 		locale: "en_US",
 		type: "website",
+	twitter: {
+		card: "summary_large_image",
+		title: "EnvForage | ML Environment Provisioning",
+		description:
+			"Generate intelligent, safe, and deterministic ML/AI environment setup scripts.",
 	},
 	// NOTE: Per-page canonical URLs are set via individual page metadata exports
 	// and the <CanonicalURL /> client component mounted below in <head>.
