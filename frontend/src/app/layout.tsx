@@ -51,6 +51,7 @@ export const metadata: Metadata = {
 		siteName: "EnvForage",
 		locale: "en_US",
 		type: "website",
+	},
 	twitter: {
 		card: "summary_large_image",
 		title: "EnvForage | ML Environment Provisioning",

@@ -3,13 +3,12 @@ FastAPI application factory and lifespan management.
 """
 
 import asyncio
-import logging
-import structlog
 import sys
 import typing
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
