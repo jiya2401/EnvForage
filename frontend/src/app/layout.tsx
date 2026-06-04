@@ -40,6 +40,12 @@ export const metadata: Metadata = {
 	title: "EnvForage | ML Environment Provisioning",
 	description:
 		"Generate intelligent, safe, and deterministic ML/AI environment setup scripts.",
+	twitter: {
+		card: "summary_large_image",
+		title: "EnvForage | ML Environment Provisioning",
+		description:
+			"Generate intelligent, safe, and deterministic ML/AI environment setup scripts.",
+	},
 	// NOTE: Per-page canonical URLs are set via individual page metadata exports
 	// and the <CanonicalURL /> client component mounted below in <head>.
 	// Do NOT set a root-level canonical here — it would override every page with "/".
