@@ -46,6 +46,7 @@ export default function ProfilesPage() {
 	const saved = localStorage.getItem("favoriteProfiles");
 
 	if (saved) {
+		// eslint-disable-next-line react-hooks/set-state-in-effect
 		setFavorites(JSON.parse(saved));
 	}
 }, []);
