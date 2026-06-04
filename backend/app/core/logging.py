@@ -5,13 +5,14 @@ import structlog
 
 from app.config import get_settings
 
+
 def setup_logging() -> None:
     """Configure structured logging for the application.
-    
+
     Routes standard library logging through structlog for JSON formatting.
     """
     settings = get_settings()
-    
+
     shared_processors = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
@@ -39,11 +40,11 @@ def setup_logging() -> None:
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
-    
+
     root_logger = logging.getLogger()
     root_logger.handlers = [handler]
     root_logger.setLevel(logging.INFO if not settings.debug else logging.DEBUG)
-    
+
     # Route uvicorn logs through the root logger to use JSON format
     for logger_name in ["uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"]:
         logger = logging.getLogger(logger_name)

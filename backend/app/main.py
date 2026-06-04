@@ -42,10 +42,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Manage application startup and shutdown."""
     settings = get_settings()
     logger = logging.getLogger(__name__)
-    
+
     logger.info(
-        "EnvForge API starting", 
-        version=settings.app_version, 
+        "EnvForge API starting",
+        version=settings.app_version,
         environment=settings.environment
     )
     # ── Background cleanup scheduler ─────────────────────────

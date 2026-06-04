@@ -4,8 +4,6 @@ import json
 import uuid
 from types import SimpleNamespace
 
-import pytest
-
 from app.compatibility.models import ResolvedEnvironment, ResolvedPackage
 from app.schemas.script import GenerationRequest
 from app.services import script_service

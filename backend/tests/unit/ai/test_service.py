@@ -3,8 +3,6 @@
 import uuid
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from app.ai.models import FixConfidenceLevel, TroubleshootRequest
 from app.ai.prompts.system import LOW_CONFIDENCE_GATE
 from app.ai.providers.mock import MockProvider
