@@ -9,12 +9,13 @@ shares the same env-loading bootstrap before `Settings` is read.
 
 import sys
 import tempfile
+import urllib.parse
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
 from dotenv import load_dotenv
-from pydantic import model_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 load_dotenv()
@@ -52,6 +53,52 @@ class Settings(BaseSettings):
     # ── CORS ─────────────────────────────────────────────────
     allowed_origins: str = "http://localhost:3000"
 
+    @field_validator("allowed_origins")
+    @classmethod
+    def validate_allowed_origins(cls, v: str) -> str:
+        """Validate allowed CORS origins.
+
+        Ensures all origins are valid HTTP/HTTPS URLs, rejects wildcards,
+        trailing slashes, paths, queries, fragments, and userinfo.
+        """
+        if not v or v.strip() == "":
+            raise ValueError("allowed_origins cannot be empty")
+
+        # Split and validate each origin
+        parts = v.split(",")
+        for part in parts:
+            if not part.strip():
+                raise ValueError(
+                    "Trailing or empty comma splits are not allowed in allowed_origins"
+                )
+
+            origin = part.strip()
+            if origin == "*":
+                raise ValueError("Wildcard '*' CORS origin is strictly forbidden")
+
+            parsed = urllib.parse.urlparse(origin)
+
+            if parsed.scheme not in ("http", "https"):
+                raise ValueError(
+                    f"CORS origin '{origin}' must use http or https scheme"
+                )
+            if not parsed.netloc:
+                raise ValueError(f"CORS origin '{origin}' must have a valid host")
+            if parsed.path != "":
+                raise ValueError(
+                    f"CORS origin '{origin}' must not contain a path or trailing slash"
+                )
+            if parsed.query:
+                raise ValueError(
+                    f"CORS origin '{origin}' must not contain query parameters"
+                )
+            if parsed.fragment:
+                raise ValueError(f"CORS origin '{origin}' must not contain a fragment")
+            if parsed.username or parsed.password or "@" in parsed.netloc:
+                raise ValueError(f"CORS origin '{origin}' must not include userinfo")
+
+        return v
+
     @property
     def allowed_origins_list(self) -> list[str]:
         return [o.strip() for o in self.allowed_origins.split(",")]
@@ -86,6 +133,15 @@ class Settings(BaseSettings):
         Enforce a strong SECRET_KEY and ADMIN_API_KEY in non-development environments,
         and validate custom_template_dir is within safe boundaries.
         """
+        # Validate localhost CORS origin in production
+        if self.environment == "production":
+            for origin in self.allowed_origins_list:
+                normalized = origin.strip().lower().rstrip("/")
+                if normalized == "http://localhost:3000":
+                    raise ValueError(
+                        "Localhost CORS origin 'http://localhost:3000' is not allowed in production"
+                    )
+
         # Validate custom_template_dir
         if self.custom_template_dir:
             resolved_path = self.custom_template_dir.resolve()
@@ -118,13 +174,7 @@ class Settings(BaseSettings):
         if self.environment != "development":
             # Validate SECRET_KEY is not the default
             if self.secret_key == DEV_SECRET_KEY:
-                raise ValueError(
-                    f"A strong SECRET_KEY is required when environment='{self.environment}'. "
-                    "Set the SECRET_KEY environment variable to a cryptographically random "
-                    "value before deploying. "
-                    "The default key ('dev-secret-key-change-in-production') is committed "
-                    "to the public repository and must never be used outside local development."
-                )
+                raise ValueError("secret_key cannot be the default development key")
 
             # Validate ADMIN_API_KEY is configured
             if not self.admin_api_key or self.admin_api_key.strip() == "":
