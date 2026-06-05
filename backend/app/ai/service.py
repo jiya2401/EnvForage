@@ -257,13 +257,27 @@ class AITroubleshootService:
             )
             return
 
+        model_name = getattr(provider, "model", "unknown")
+        persist_failed = False
+        try:
+            await self._persist_session(
+                db,
+                session_id,
+                request,
+                llm_result,
+                provider_name,
+                model_name,
+            )
+        except Exception:
+            persist_failed = True
+
         latency_ms = int((time.monotonic() - start_time) * 1000)
         await self._log_audit(
             db,
             session_id=session_id,
             input_hash=input_hash,
-            safety_passed=True,
-            safety_violation=None,
+            safety_passed=not persist_failed,
+            safety_violation="DB persistence failure" if persist_failed else None,
             provider=provider_name,
             tokens_used=0,
             latency_ms=latency_ms,
