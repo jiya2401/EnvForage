@@ -320,7 +320,7 @@ async def test_dispatch_webhooks_returns_per_url_result() -> None:
     url_a = "https://a.example.com/hook"
     url_b = "https://b.example.com/hook"
 
-    async def _fake_dispatch(url: str, payload: dict, **kwargs: Any) -> bool:
+    async def _fake_dispatch(url: str, payload: dict[str, Any], **kwargs: Any) -> bool:
         return url == url_a  # url_a succeeds, url_b fails
 
     with patch("app.core.events.dispatch_webhook", side_effect=_fake_dispatch):
@@ -333,3 +333,70 @@ async def test_dispatch_webhooks_returns_per_url_result() -> None:
 async def test_dispatch_webhooks_empty_list_returns_empty_dict() -> None:
     results = await dispatch_webhooks([], PAYLOAD)
     assert results == {}
+
+
+@pytest.mark.asyncio
+async def test_dispatch_webhook_serialization_error_returns_false(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """If payload contains non-serialisable data, _hash_payload raises TypeError,
+    which must be caught by the generic exception handler and log details with status_code=None, payload_hash=None.
+    """
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    # Payload contains a set, which is not JSON serialisable
+    invalid_payload = {"set_data": {1, 2, 3}}
+
+    with caplog.at_level(logging.ERROR, logger="app.core.events"):
+        result = await dispatch_webhook(TARGET_URL, invalid_payload, client=mock_client)
+
+    assert result is False
+    error_record = next(r for r in caplog.records if r.levelno == logging.ERROR)
+    assert error_record.__dict__.get("status_code") is None
+    assert error_record.__dict__.get("payload_hash") is None
+    assert "unexpected error" in error_record.message
+
+
+@pytest.mark.asyncio
+async def test_dispatch_webhook_unexpected_exception_returns_false(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An unexpected exception during POST (e.g. RuntimeError) must return False
+    and log details via logger.exception with status_code=None.
+    """
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_client.post = AsyncMock(side_effect=RuntimeError("something went wrong"))
+
+    with caplog.at_level(logging.ERROR, logger="app.core.events"):
+        result = await dispatch_webhook(TARGET_URL, PAYLOAD, client=mock_client)
+
+    assert result is False
+    error_record = next(r for r in caplog.records if r.levelno == logging.ERROR)
+    assert error_record.__dict__.get("status_code") is None
+    assert error_record.__dict__.get("payload_hash") == _hash_payload(PAYLOAD)
+    assert "unexpected error" in error_record.message
+
+
+@pytest.mark.asyncio
+async def test_dispatch_webhooks_handles_unexpected_exceptions_in_fanout(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """If a dispatch_webhook call raises an unhandled exception, dispatch_webhooks
+    must handle it, log the error, and mark that URL as False.
+    """
+    url_a = "https://a.example.com/hook"
+    url_b = "https://b.example.com/hook"
+
+    # We mock dispatch_webhook to raise an exception for url_b
+    async def _fake_dispatch(url: str, payload: dict[str, Any], **kwargs: Any) -> bool:
+        if url == url_b:
+            raise ValueError("Unexpected crash in dispatch")
+        return True
+
+    with patch("app.core.events.dispatch_webhook", side_effect=_fake_dispatch):
+        with caplog.at_level(logging.ERROR, logger="app.core.events"):
+            results = await dispatch_webhooks([url_a, url_b], PAYLOAD)
+
+    assert results == {url_a: True, url_b: False}
+    error_record = next(r for r in caplog.records if r.levelno == logging.ERROR)
+    assert "Unexpected error in dispatch_webhooks fan-out" in error_record.message
+    assert error_record.__dict__.get("target_url") == url_b

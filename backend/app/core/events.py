@@ -11,7 +11,7 @@ Logged on failure
 - ``status_code``  – HTTP status returned (or ``None`` for network errors)
 - ``payload_hash`` – SHA-256 hex-digest of the serialised payload, so the
                      exact payload can be correlated with request logs
-- ``response_body`` – first 500 characters of the response body (truncated)
+- ``response_body`` – up to 500 characters (plus ellipsis if truncated) of the response body
 - full exception traceback (via ``logger.exception``)
 """
 
@@ -78,10 +78,10 @@ async def dispatch_webhook(
     bool
         ``True`` if the delivery succeeded (2xx response), ``False`` otherwise.
     """
-    payload_hash = _hash_payload(payload)
-
     async def _send(c: httpx.AsyncClient) -> bool:
+        payload_hash = None
         try:
+            payload_hash = _hash_payload(payload)
             response = await c.post(
                 target_url,
                 json=payload,
@@ -183,11 +183,28 @@ async def dispatch_webhooks(
     dict[str, bool]
         Mapping of ``{url: success}`` for each registered URL.
     """
-    results = await asyncio.gather(
-        *(
-            dispatch_webhook(url, payload, timeout=timeout)
-            for url in registrations
-        ),
-        return_exceptions=False,
-    )
-    return dict(zip(registrations, results, strict=True))
+    if not registrations:
+        return {}
+
+    async with httpx.AsyncClient() as client:
+        results = await asyncio.gather(
+            *(
+                dispatch_webhook(url, payload, timeout=timeout, client=client)
+                for url in registrations
+            ),
+            return_exceptions=True,
+        )
+
+    final_results = {}
+    for url, res in zip(registrations, results, strict=True):
+        if isinstance(res, BaseException):
+            logger.error(
+                "Unexpected error in dispatch_webhooks fan-out",
+                extra={"target_url": url},
+                exc_info=res,
+            )
+            final_results[url] = False
+        else:
+            final_results[url] = res
+
+    return final_results
