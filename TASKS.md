@@ -149,7 +149,7 @@
 ## Milestone 11: Webhooks & Plugin Architecture
 - [x] **Step 121: Webhook Database Models** (Target: `backend/app/models/webhook.py`)
 - [x] **Step 122: Webhook Registration API Routes** (Target: `backend/app/api/v1/webhooks.py`)
-- [ ] **Step 123: Asynchronous Event Dispatcher** (Target: `backend/app/core/events.py`)
+- [x] **Step 123: Asynchronous Event Dispatcher** (Target: `backend/app/core/events.py`)
 - [ ] **Step 124: HMAC Signature Generator** (Target: `backend/app/core/security.py`)
 - [ ] **Step 125: Webhook Retry & Backoff Logic** (Target: `backend/app/core/events.py`)
 - [ ] **Step 126: Plugin Interface Base Class** (Target: `backend/app/plugins/base.py`)
