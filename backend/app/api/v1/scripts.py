@@ -36,6 +36,14 @@ router = APIRouter()
         422: {"description": "Request validation error"},
     },
 )
+def _stream_zip(buffer: io.BytesIO):
+    """Stream ZIP contents and ensure buffer cleanup."""
+    try:
+        yield buffer.getvalue()
+    finally:
+        buffer.close()
+
+
 async def generate_scripts(
     request: GenerationRequest,
     db: DB,
@@ -161,7 +169,7 @@ async def download_scripts(
 
     zip_buffer.seek(0)
     return StreamingResponse(
-        zip_buffer,
+        _stream_zip(zip_buffer),
         media_type="application/zip",
         headers={
             "Content-Disposition": f"attachment; filename=envforge_{job_id[:8]}.zip"
