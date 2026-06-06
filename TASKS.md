@@ -60,7 +60,7 @@
 - [x] **Step 45: Interactive Diff Viewer for Configuration** (Target: `frontend/src/components/DiffViewer.tsx`)
 - [x] **Step 46: Hardware Diagnostics Export Center** (Target: `frontend/src/app/diagnose/page.tsx`)
 - [x] **Step 47: Connect Loader to Generator Engine** (Target: `frontend/src/app/generate/page.tsx`)
-- [ ] **Step 48: UX Loading Skeletons** (Target: `frontend/src/components/ui/Skeleton.tsx`)
+- [x] **Step 48: UX Loading Skeletons** (Target: `frontend/src/components/ui/Skeleton.tsx`)
 
 ## Milestone 5: Core Backend APIs & Foundation
 - [x] **Step 49: FastAPI Base Configuration** (Target: `backend/app/main.py`)
