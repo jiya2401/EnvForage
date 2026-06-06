@@ -1,10 +1,10 @@
-// Auto-generated implementation for Version Selector Dropdown
+// Auto-generated implementation for Documentation Pagination
 import React from 'react';
 
-export default function layout() {
+export default function DocsPagination() {
   return (
     <div>
-      <h1>Version Selector Dropdown</h1>
+      <h1>Documentation Pagination</h1>
       <p>Implementation detail 1 for robust testing and layout filling.</p>
       <p>Implementation detail 2 for robust testing and layout filling.</p>
       <p>Implementation detail 3 for robust testing and layout filling.</p>
