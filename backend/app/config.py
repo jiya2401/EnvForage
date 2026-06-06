@@ -74,7 +74,7 @@ class Settings(BaseSettings):
 
             origin = part.strip()
             if origin == "*":
-                raise ValueError("Wildcard '*' CORS origin is strictly forbidden")
+                continue
 
             parsed = urllib.parse.urlparse(origin)
 
