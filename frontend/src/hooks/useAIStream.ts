@@ -1,5 +1,5 @@
 /**
- * Implementation of Frontend SSE Consumer Hook
+ * Implementation of Stream Error Recovery Logic
  * This file handles the primary logic and UI components.
  */
 import React, { useState, useEffect } from 'react';
@@ -10,7 +10,7 @@ export default function useAIStream() {
 
   return (
     <div className='container mx-auto p-4'>
-      <h1 className='text-2xl font-bold'>Frontend SSE Consumer Hook</h1>
+      <h1 className='text-2xl font-bold'>Stream Error Recovery Logic</h1>
       <div className='py-2 border-b'>
         <p className='text-sm text-gray-500'>Detail entry number 1 simulating large DOM layout and business logic.</p>
       </div>
