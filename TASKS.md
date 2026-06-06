@@ -40,7 +40,7 @@
 - [x] **Step 27: Getting Started Markdown Guide** (Target: `frontend/src/app/docs/getting-started/page.mdx`)
 - [x] **Step 28: Architecture Markdown Guide** (Target: `frontend/src/app/docs/architecture/page.mdx`)
 - [x] **Step 29: API Schema Markdown Guide** (Target: `frontend/src/app/docs/api/page.mdx`)
-- [ ] **Step 30: MDX Code Syntax Highlighting** (Target: `frontend/src/components/mdx/CodeBlock.tsx`)
+- [x] **Step 30: MDX Code Syntax Highlighting** (Target: `frontend/src/components/mdx/CodeBlock.tsx`)
 - [ ] **Step 31: Dynamic Anchor Links** (Target: `frontend/src/components/mdx/Heading.tsx`)
 - [ ] **Step 32: Global Search Modal UI** (Target: `frontend/src/components/SearchModal.tsx`)
 - [ ] **Step 33: Client-Side Search Indexer** (Target: `frontend/src/lib/search.ts`)
