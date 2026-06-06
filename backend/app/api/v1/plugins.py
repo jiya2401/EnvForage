@@ -12,7 +12,10 @@ _active_plugins: dict[str, bool] = {}
 async def list_available_plugins() -> list[dict[str, Any]]:
     # In a real app we'd load them once or refresh cache
     plugins = load_plugins("app.plugins")
-    return [{"name": p().name, "active": p().name in _active_plugins} for p in plugins]
+    return [
+        {"name": (plugin := p()).name, "active": plugin.name in _active_plugins}
+        for p in plugins
+    ]
 
 
 @router.post("/plugins/{plugin_name}/activate")

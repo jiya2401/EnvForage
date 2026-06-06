@@ -29,7 +29,7 @@ celery_app.conf.update(
 )
 
 
-@celery_app.task(name="run_diagnose_task")  # type: ignore[misc]
+@celery_app.task(name="run_diagnose_task")  # type: ignore[untyped-decorator]
 def run_diagnose_task(
     report_id: str,
     report_data: dict[str, Any],

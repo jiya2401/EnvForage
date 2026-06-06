@@ -1,7 +1,7 @@
 import React from 'react';
 
 export const Heading = ({ level, children, ...props }: any) => {
-  const Tag = `h${level}` as keyof JSX.IntrinsicElements;
+  const Tag = `h${level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
   const id = typeof children === 'string' 
     ? children.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
     : '';
