@@ -150,7 +150,7 @@
 - [x] **Step 121: Webhook Database Models** (Target: `backend/app/models/webhook.py`)
 - [x] **Step 122: Webhook Registration API Routes** (Target: `backend/app/api/v1/webhooks.py`)
 - [x] **Step 123: Asynchronous Event Dispatcher** (Target: `backend/app/core/events.py`)
-- [ ] **Step 124: HMAC Signature Generator** (Target: `backend/app/core/security.py`)
+- [x] **Step 124: HMAC Signature Generator** (Target: `backend/app/core/security.py`)
 - [ ] **Step 125: Webhook Retry & Backoff Logic** (Target: `backend/app/core/events.py`)
 - [ ] **Step 126: Plugin Interface Base Class** (Target: `backend/app/plugins/base.py`)
 - [ ] **Step 127: Dynamic Plugin Loader Utility** (Target: `backend/app/plugins/loader.py`)
