@@ -130,7 +130,9 @@ async def test_engine():
                 if isinstance(item, list):
                     return all(x in arr for x in item)
                 return item in arr
-            except Exception:
+            except Exception as e:
+                import logging
+                logging.error(f"Test fixture error: {e}")
                 return False
 
         dbapi_connection.create_function("array_contains", 2, array_contains)
