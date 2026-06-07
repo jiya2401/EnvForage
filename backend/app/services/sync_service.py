@@ -130,7 +130,9 @@ async def sync_pypi_releases(db: AsyncSession) -> None:
                 for v_str in releases.keys():
                     try:
                         sorted_releases.append((Version(v_str), v_str))
-                    except Exception:
+                    except Exception as e:
+                    import logging
+                    logging.error(f"Sync error 1: {e}")
                         pass
                 sorted_releases.sort()
 
