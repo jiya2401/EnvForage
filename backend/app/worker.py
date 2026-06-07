@@ -151,7 +151,9 @@ def run_diagnose_task(
                     docs_url=None,
                 )
             )
-        except Exception:
+        except Exception as e:
+            import logging
+            logging.error(f"Worker error: {e}")
             logger.exception("Unexpected error resolving profile %s", profile_slug)
             raise
 
