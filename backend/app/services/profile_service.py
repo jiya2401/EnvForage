@@ -277,6 +277,7 @@ async def delete_profile(db: AsyncSession, slug: str) -> bool:
         select(EnvironmentProfile)
         .where(EnvironmentProfile.slug == slug)
         .where(EnvironmentProfile.deleted_at.is_(None))
+        .options(selectinload(EnvironmentProfile.packages))
     )
     profile = result.scalar_one_or_none()
     if not profile:
