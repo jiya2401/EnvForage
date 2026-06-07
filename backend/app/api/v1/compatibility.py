@@ -205,7 +205,9 @@ async def get_framework_cuda_support(db: DB) -> dict[str, Any]:
     try:
         res = await db.execute(select(PythonMatrixDBModel))
         entries = res.scalars().all()
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.error(f"CUDA Framework DB fetch: {e}")
         pass
 
     if entries:
