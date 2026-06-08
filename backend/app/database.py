@@ -5,6 +5,7 @@ Uses SQLAlchemy 2.0 async API throughout.
 
 from collections.abc import AsyncGenerator
 
+from fastapi import logger
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -56,8 +57,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             yield session
             await session.commit()
         except Exception as e:
-        import logging
-        logging.error(f"DB connection error: {e}")
+            logger.error("DB connection error: %s", e)
             await session.rollback()
             raise
         finally:

@@ -6,6 +6,7 @@ import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
+from venv import logger
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,6 +21,7 @@ from app.schemas.profile import (
     ProfileSummarySchema,
     ProfileUpdateSchema,
 )
+from backend.app.core import logging
 
 
 async def get_all_active_profiles(
@@ -256,8 +258,7 @@ async def create_profile(
     try:
         await db.commit()
     except Exception as e:
-            import logging
-            logging.error(f"Profile service error: {e}")
+        logger.error("Profile service error: %s", e)
         await db.rollback()
         raise
 
@@ -285,8 +286,7 @@ async def delete_profile(
     try:
         await db.commit()
     except Exception as e:
-    import logging
-    logging.error(f"Profile error 1: {e}")
+        logger.error("Profile error 1: %s", e)
         await db.rollback()
         raise
 
@@ -328,8 +328,7 @@ async def update_profile(
     try:
         await db.commit()
     except Exception as e:
-    import logging
-    logging.error(f"Profile error 2: {e}")
+        logger.error("Profile error 2: %s", e)
         await db.rollback()
         raise
 
