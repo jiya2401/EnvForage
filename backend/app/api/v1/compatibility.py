@@ -57,7 +57,9 @@ async def get_compatibility_summary(db: DB) -> dict[str, Any]:
     try:
         cuda_res = await db.execute(select(CUDAMatrixDBModel))
         cuda_entries = cuda_res.scalars().all()
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.error(f"CUDA summary DB fetch: {e}")
         pass
 
     if cuda_entries:
@@ -72,7 +74,9 @@ async def get_compatibility_summary(db: DB) -> dict[str, Any]:
     try:
         rocm_res = await db.execute(select(RocmMatrixDBModel))
         rocm_entries = rocm_res.scalars().all()
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.error(f"ROCm summary DB fetch: {e}")
         pass
 
     if rocm_entries:
@@ -87,7 +91,9 @@ async def get_compatibility_summary(db: DB) -> dict[str, Any]:
     try:
         python_res = await db.execute(select(PythonMatrixDBModel))
         python_entries = python_res.scalars().all()
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.error(f"Python summary DB fetch: {e}")
         pass
 
     if python_entries:
@@ -147,7 +153,9 @@ async def get_cuda_matrix(db: DB) -> dict[str, Any]:
     try:
         res = await db.execute(select(CUDAMatrixDBModel))
         cuda_entries = res.scalars().all()
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.error(f"CUDA Matrix DB fetch: {e}")
         pass
 
     if cuda_entries:
@@ -197,16 +205,18 @@ async def get_framework_cuda_support(db: DB) -> dict[str, Any]:
     try:
         res = await db.execute(select(PythonMatrixDBModel))
         entries = res.scalars().all()
-    except Exception:
+    except Exception as error:
+        import logging
+        logging.error(f"CUDA Framework DB fetch: {error}")
         pass
 
     if entries:
         data: dict[str, dict[str, list[str]]] = {}
-        for e in entries:
-            if e.supported_cuda:
-                if e.framework not in data:
-                    data[e.framework] = {}
-                data[e.framework][e.version] = e.supported_cuda
+        for entry in entries:
+            if entry.supported_cuda:
+                if entry.framework not in data:
+                    data[entry.framework] = {}
+                data[entry.framework][entry.version] = entry.supported_cuda
     else:
         data = FRAMEWORK_CUDA_SUPPORT
 
@@ -257,7 +267,9 @@ async def get_cuda_version(
                 "notes": entry.notes or "",
                 "source_url": entry.source_url or "",
             }
-    except Exception:
+    except Exception as e:
+        import logging
+        logging.error(f"CUDA version lookup: {e}")
         pass
 
     # Fallback to static

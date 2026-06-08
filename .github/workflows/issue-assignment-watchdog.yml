@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Run Assignment Checks
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             // Get issue, comment, and sender details from payload

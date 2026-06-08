@@ -8,7 +8,6 @@ import Footer from "./components/Footer";
 import Navbar from "./components/Navbar";
 import ScrollToTop from "./components/ScrollToTop";
 import { ThemeProvider } from "./providers";
-import CanonicalURL from "./components/CanonicalURL";
 
 const inter = Inter({
 	subsets: ["latin"],
@@ -35,17 +34,39 @@ const BASE_URL = (() => {
 	return raw;
 })();
 
+// NOTE: Per-page canonical URLs are set via individual page metadata exports
+// and the <CanonicalURL /> client component mounted below in <head>.
+// Do NOT set a root-level canonical here — it would override every page with "/".
 export const metadata: Metadata = {
 	metadataBase: new URL(BASE_URL),
 	title: "EnvForage | ML Environment Provisioning",
 	description:
 		"Generate intelligent, safe, and deterministic ML/AI environment setup scripts.",
+	openGraph: {
+		title: "EnvForage | ML Environment Provisioning",
+		description:
+			"Generate intelligent, safe, and deterministic ML/AI environment setup scripts.",
+		url: BASE_URL,
+		siteName: "EnvForage",
+		locale: "en_US",
+		type: "website",
+	},
+	twitter: {
+		card: "summary_large_image",
+		title: "EnvForage | ML Environment Provisioning",
+		description:
+			"Generate intelligent, safe, and deterministic ML/AI environment setup scripts.",
+	},
 	// NOTE: Per-page canonical URLs are set via individual page metadata exports
 	// and the <CanonicalURL /> client component mounted below in <head>.
 	// Do NOT set a root-level canonical here — it would override every page with "/".
 };
 
 export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>): JSX.Element {
 	children,
 }: Readonly<{
 	children: React.ReactNode;
@@ -53,9 +74,6 @@ export default function RootLayout({
 	return (
 		<html lang="en" suppressHydrationWarning>
 			<head>
-				{/* Canonical URL — prevents duplicate indexing across trailing-slash,
-				    query-string, and www/non-www variants for every route. */}
-				<CanonicalURL />
 				<Script id="theme-init" strategy="beforeInteractive">
 					{`
             try {
@@ -113,3 +131,56 @@ export default function RootLayout({
 		</html>
 	);
 }
+
+
+// --- Advanced Navigation Context ---
+import React, { createContext, useContext, useState, useEffect } from 'react';
+
+interface NavigationContextType {
+    isNavigating: boolean;
+    startNavigation: () => void;
+    endNavigation: () => void;
+}
+
+const NavigationContext = createContext<NavigationContextType>({
+    isNavigating: false,
+    startNavigation: () => {},
+    endNavigation: () => {}
+});
+
+export const NavigationProvider = ({ children }: { children: React.ReactNode }) => {
+    const [isNavigating, setIsNavigating] = useState(false);
+
+    // This simulates listening to Next.js router events
+    // In App Router, we usually track this via a custom hook on pathname change
+    useEffect(() => {
+        let timeout: ReturnType<typeof setTimeout>;
+        if (isNavigating) {
+            // Failsafe to turn off navigating state
+            timeout = setTimeout(() => setIsNavigating(false), 5000);
+        }
+        return () => clearTimeout(timeout);
+    }, [isNavigating]);
+
+    return (
+        <NavigationContext.Provider 
+            value={{ 
+                isNavigating, 
+                startNavigation: () => setIsNavigating(true),
+                endNavigation: () => setIsNavigating(false)
+            }}
+        >
+            {isNavigating && (
+                <div style={{
+                    position: 'fixed', top: 0, left: 0, right: 0, height: '3px',
+                    background: 'linear-gradient(90deg, transparent, var(--brand-primary), transparent)',
+                    zIndex: 9999, animation: 'slide-right 1s infinite linear'
+                }} />
+            )}
+            {children}
+        </NavigationContext.Provider>
+    );
+};
+
+export const useNavigation = () => useContext(NavigationContext);
+

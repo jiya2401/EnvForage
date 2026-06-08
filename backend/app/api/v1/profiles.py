@@ -14,6 +14,7 @@ from app.schemas.profile import (
     ProfileFilters,
     ProfileListResponse,
     ProfileSummarySchema,
+    ProfileUpdateSchema,
 )
 from app.services import profile_service
 
@@ -198,3 +199,46 @@ async def delete_profile(
             error_code="PROFILE_NOT_FOUND",
         )
     logger.info("Profile deleted: slug=%s", slug)
+
+
+@router.patch(
+    "/profiles/{slug}",
+    response_model=ProfileDetailSchema,
+    status_code=status.HTTP_200_OK,
+    summary="Update environment profile",
+    description="Partially update an environment profile using its slug. Only the fields provided in the request body are changed.",
+    tags=["Profiles"],
+    responses={
+        200: {"description": "Profile updated successfully."},
+        401: {"description": "Missing or invalid admin API key."},
+        404: {"description": "Profile not found."},
+        422: {"description": "Request validation error."},
+        503: {"description": "Admin API key not configured on this server."},
+    },
+)
+async def update_profile(
+    profile_in: ProfileUpdateSchema,
+    db: DB,
+    slug: str = Path(
+        ...,
+        description="Unique slug of the environment profile to update.",
+        examples=["pytorch-cu121"],
+    ),
+    _rate_limit: None = Depends(general_rate_limit),
+    _auth: None = Depends(require_admin),
+) -> ProfileDetailSchema:
+    """
+    Partially update an environment profile by slug.
+
+    Only the fields included in the request body are modified;
+    omitted fields retain their current values.
+    """
+    logger.info("Admin write: updating profile slug=%s", slug)
+    updated = await profile_service.update_profile(db, slug, profile_in)
+    if updated is None:
+        raise EntityNotFoundError(
+            resource=f"Profile '{slug}'",
+            error_code="PROFILE_NOT_FOUND",
+        )
+    logger.info("Profile updated: slug=%s", slug)
+    return ProfileDetailSchema.model_validate(updated)

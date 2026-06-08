@@ -6,6 +6,7 @@ import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
+from venv import logger
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +19,7 @@ from app.schemas.profile import (
     ProfileDetailSchema,
     ProfileFilters,
     ProfileSummarySchema,
+    ProfileUpdateSchema,
 )
 
 
@@ -62,9 +64,15 @@ async def list_cached_profiles(
     profiles, total = await list_profiles(db, filters, include_packages)
 
     if include_packages:
-        profiles_data = [ProfileDetailSchema.model_validate(p).model_dump(mode="json") for p in profiles]
+        profiles_data = [
+            ProfileDetailSchema.model_validate(p).model_dump(mode="json")
+            for p in profiles
+        ]
     else:
-        profiles_data = [ProfileSummarySchema.model_validate(p).model_dump(mode="json") for p in profiles]
+        profiles_data = [
+            ProfileSummarySchema.model_validate(p).model_dump(mode="json")
+            for p in profiles
+        ]
 
     if redis and cache_key:
         cache_data = {"profiles": profiles_data, "total": total}
@@ -143,11 +151,15 @@ async def list_profiles(
     profiles = list(result.scalars().all())
 
     if redis and cache_key:
-        profiles_data = [ProfileSummarySchema.model_validate(p).model_dump(mode="json") for p in profiles]
+        profiles_data = [
+            ProfileSummarySchema.model_validate(p).model_dump(mode="json")
+            for p in profiles
+        ]
         cache_data = {"profiles": profiles_data, "total": total}
         await redis.setex(cache_key, 300, json.dumps(cache_data))
 
     return profiles, total
+
 
 async def get_cached_profile_by_slug(
     db: AsyncSession,
@@ -194,10 +206,13 @@ async def get_profile_by_slug(
     profile = result.scalar_one_or_none()
 
     if redis and profile:
-        profile_data = ProfileDetailSchema.model_validate(profile).model_dump(mode="json")
+        profile_data = ProfileDetailSchema.model_validate(profile).model_dump(
+            mode="json"
+        )
         await redis.setex(cache_key, 300, json.dumps(profile_data))
 
     return profile
+
 
 async def get_profile_by_id(
     db: AsyncSession,
@@ -241,7 +256,10 @@ async def create_profile(
     db.add(db_profile)
     try:
         await db.commit()
-    except Exception:
+    except Exception as e:
+        import logging
+
+        logging.error(f"Profile service error: {e}")
         await db.rollback()
         raise
 
@@ -254,23 +272,80 @@ async def create_profile(
     return profile
 
 
-async def delete_profile(
-    db: AsyncSession,
-    slug: str,
-) -> bool:
-    """Soft delete a profile by slug. Returns True if deleted, False if not found."""
-    profile = await get_profile_by_slug(db, slug)
+async def delete_profile(db: AsyncSession, slug: str) -> bool:
+    # Fetch ORM object directly, NOT from cache
+    result = await db.execute(
+        select(EnvironmentProfile)
+        .where(EnvironmentProfile.slug == slug)
+        .where(EnvironmentProfile.deleted_at.is_(None))
+        .options(selectinload(EnvironmentProfile.packages))
+    )
+    profile = result.scalar_one_or_none()
     if not profile:
         return False
 
     profile.deleted_at = datetime.now(UTC)
     profile.status = "DELETED"
 
+    for pkg in profile.packages:
+        pkg.deleted_at = datetime.now(UTC)
+
     try:
         await db.commit()
-    except Exception:
+    except Exception as e:
+        import logging
+
+        logging.error(f"Profile error 1: {e}")
         await db.rollback()
         raise
 
     await _invalidate_profile_caches(slug)
     return True
+
+
+async def update_profile(
+    db: AsyncSession,
+    slug: str,
+    profile_in: ProfileUpdateSchema,
+) -> EnvironmentProfile | None:
+    """Partially update a profile by slug.
+
+    Only fields explicitly set in ``profile_in`` are applied.
+    If ``packages`` is provided the existing package list is replaced entirely.
+    Returns the updated profile, or ``None`` if not found.
+    """
+    profile = await get_profile_by_slug(db, slug)
+    if not profile:
+        return None
+
+    update_data = profile_in.model_dump(exclude_unset=True)
+
+    # Handle package replacement separately
+    new_packages = update_data.pop("packages", None)
+
+    for field, value in update_data.items():
+        setattr(profile, field, value)
+
+    if new_packages is not None:
+        # Replace package list in-place (cascade delete-orphan handles old rows)
+        profile.packages.clear()
+        for pkg_data in new_packages:
+            profile.packages.append(ProfilePackage(**pkg_data))
+
+    profile.updated_at = datetime.now(UTC)
+
+    try:
+        await db.commit()
+    except Exception as e:
+        import logging
+
+        logging.error(f"Profile error 2: {e}")
+        await db.rollback()
+        raise
+
+    updated = await get_profile_by_id(db, profile.id)
+    if not updated:
+        raise ValueError("Failed to retrieve updated profile")
+
+    await _invalidate_profile_caches(slug)
+    return updated

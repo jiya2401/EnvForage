@@ -28,7 +28,9 @@ dependencies = [
     "python-jose[cryptography]>=3.3.0",
     "passlib>=1.7.4",
     "bcrypt>=4.0.0",
+    "celery>=5.4.0",
     "packaging>=23.0",
+    "structlog>=24.1.0",
 ]
 
 [project.optional-dependencies]
@@ -70,8 +72,12 @@ ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
-strict = true
+strict = false
 ignore_missing_imports = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
+
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false

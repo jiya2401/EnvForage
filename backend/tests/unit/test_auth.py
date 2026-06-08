@@ -35,6 +35,7 @@ def _bcrypt_verify(plain: str, hashed: str) -> bool:
     """Verify a bcrypt hash directly — bypasses passlib's self-test."""
     return bcrypt.checkpw(plain.encode(), hashed.encode())
 
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 # A passlib CryptContext that uses no real hashing — avoids passlib/bcrypt 5.x
@@ -51,7 +52,15 @@ def _make_client(db_session: AsyncSession, monkeypatch) -> TestClient:
     async def override_get_db():
         yield db_session
 
+    # Bypass rate limiting so tests are not throttled.
+    # Override the shared auth_rate_limit used by both /signup and /signin.
+    async def mock_rate_limiter():
+        return None
+
+    from app.middleware.rate_limit import auth_rate_limit
+
     test_app.dependency_overrides[get_db] = override_get_db
+    test_app.dependency_overrides[auth_rate_limit] = mock_rate_limiter
     return TestClient(test_app, raise_server_exceptions=True)
 
 
@@ -68,7 +77,7 @@ async def test_signup_success(db_session: AsyncSession, monkeypatch):
             "fname": "Alice",
             "lname": "Example",
             "email": "alice@example.com",
-            "password": "securepass",
+            "password": "SecurePass123!",  # meets new requirements: 12+ chars, uppercase, lowercase, digit, special
         },
     )
     assert resp.status_code == 200
@@ -85,7 +94,7 @@ async def test_signup_user_persisted_in_db(db_session: AsyncSession, monkeypatch
             "fname": "Bob",
             "lname": "Builder",
             "email": "bob@example.com",
-            "password": "password123",
+            "password": "BuilderPass123!",  # meets new requirements
         },
     )
 
@@ -101,14 +110,16 @@ async def test_signup_user_persisted_in_db(db_session: AsyncSession, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_signup_duplicate_email_returns_400(db_session: AsyncSession, monkeypatch):
+async def test_signup_duplicate_email_returns_400(
+    db_session: AsyncSession, monkeypatch
+):
     """Registering with an already-used e-mail returns HTTP 400."""
     client = _make_client(db_session, monkeypatch)
     payload = {
         "fname": "Carol",
         "lname": "Tester",
         "email": "carol@example.com",
-        "password": "password1",
+        "password": "TestPass1234!",  # meets new requirements
     }
     client.post("/api/v1/signup", json=payload)  # first registration
     resp = client.post("/api/v1/signup", json=payload)  # duplicate
@@ -117,8 +128,10 @@ async def test_signup_duplicate_email_returns_400(db_session: AsyncSession, monk
 
 
 @pytest.mark.asyncio
-async def test_signup_password_too_short_returns_422(db_session: AsyncSession, monkeypatch):
-    """A password shorter than 6 characters is rejected at schema level (422)."""
+async def test_signup_password_too_short_returns_422(
+    db_session: AsyncSession, monkeypatch
+):
+    """A password shorter than 12 characters is rejected at schema level (422)."""
     client = _make_client(db_session, monkeypatch)
     resp = client.post(
         "/api/v1/signup",
@@ -126,10 +139,82 @@ async def test_signup_password_too_short_returns_422(db_session: AsyncSession, m
             "fname": "Dave",
             "lname": "Short",
             "email": "dave@example.com",
-            "password": "abc",  # only 3 chars
+            "password": "Abc123!",  # only 7 chars (less than 12)
         },
     )
-    # Pydantic Field(min_length=6) returns 422 Unprocessable Entity
+    # Pydantic Field(min_length=12) returns 422 Unprocessable Entity
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_signup_password_missing_uppercase_returns_422(
+    db_session: AsyncSession, monkeypatch
+):
+    """A password without uppercase letters is rejected (422)."""
+    client = _make_client(db_session, monkeypatch)
+    resp = client.post(
+        "/api/v1/signup",
+        json={
+            "fname": "Eve",
+            "lname": "Tester",
+            "email": "eve@example.com",
+            "password": "lowercase123!",  # missing uppercase
+        },
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_signup_password_missing_lowercase_returns_422(
+    db_session: AsyncSession, monkeypatch
+):
+    """A password without lowercase letters is rejected (422)."""
+    client = _make_client(db_session, monkeypatch)
+    resp = client.post(
+        "/api/v1/signup",
+        json={
+            "fname": "Frank",
+            "lname": "Tester",
+            "email": "frank@example.com",
+            "password": "UPPERCASE123!",  # missing lowercase
+        },
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_signup_password_missing_digit_returns_422(
+    db_session: AsyncSession, monkeypatch
+):
+    """A password without digits is rejected (422)."""
+    client = _make_client(db_session, monkeypatch)
+    resp = client.post(
+        "/api/v1/signup",
+        json={
+            "fname": "Grace",
+            "lname": "Tester",
+            "email": "grace@example.com",
+            "password": "NoDigitsHere!",  # missing digit
+        },
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_signup_password_missing_special_char_returns_422(
+    db_session: AsyncSession, monkeypatch
+):
+    """A password without special characters is rejected (422)."""
+    client = _make_client(db_session, monkeypatch)
+    resp = client.post(
+        "/api/v1/signup",
+        json={
+            "fname": "Henry",
+            "lname": "Tester",
+            "email": "henry@example.com",
+            "password": "NoSpecialChar123",  # missing special character
+        },
+    )
     assert resp.status_code == 422
 
 
@@ -148,6 +233,7 @@ async def test_signup_missing_fields_returns_422(db_session: AsyncSession, monke
 async def test_signin_success_returns_token(db_session: AsyncSession, monkeypatch):
     """Valid credentials return a JWT token and the user's email."""
     client = _make_client(db_session, monkeypatch)
+    strong_password = "TokenPass123!"  # meets new requirements
     # Register first
     client.post(
         "/api/v1/signup",
@@ -155,13 +241,13 @@ async def test_signin_success_returns_token(db_session: AsyncSession, monkeypatc
             "fname": "Eve",
             "lname": "Token",
             "email": "eve@example.com",
-            "password": "hunter42",
+            "password": strong_password,
         },
     )
     # Then sign in
     resp = client.post(
         "/api/v1/signin",
-        json={"email": "eve@example.com", "password": "hunter42"},
+        json={"email": "eve@example.com", "password": strong_password},
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -181,12 +267,15 @@ async def test_signin_wrong_password_returns_401(db_session: AsyncSession, monke
             "fname": "Frank",
             "lname": "Wrong",
             "email": "frank@example.com",
-            "password": "correctpass",
+            "password": "CorrectPass123!",  # meets new requirements
         },
     )
     resp = client.post(
         "/api/v1/signin",
-        json={"email": "frank@example.com", "password": "wrongpass"},
+        json={
+            "email": "frank@example.com",
+            "password": "WrongPass123!",
+        },  # wrong password but still strong
     )
     assert resp.status_code == 401
     assert "invalid" in resp.json()["detail"].lower()
@@ -204,7 +293,9 @@ async def test_signin_unknown_email_returns_401(db_session: AsyncSession, monkey
 
 
 @pytest.mark.asyncio
-async def test_signin_invalid_email_format_returns_422(db_session: AsyncSession, monkeypatch):
+async def test_signin_invalid_email_format_returns_422(
+    db_session: AsyncSession, monkeypatch
+):
     """Submitting a malformed e-mail address produces a 422 validation error."""
     client = _make_client(db_session, monkeypatch)
     resp = client.post(
@@ -232,7 +323,7 @@ async def test_user_repository_user_exists_true_after_create(db_session: AsyncSe
         email="exists@example.com",
         fname="Test",
         lname="User",
-        hashed_password="some-hashed-value",
+        hashed_password="test-hashed-value",
     )
     assert await repo.user_exists("exists@example.com") is True
 
@@ -274,7 +365,7 @@ async def test_bcrypt_hash_and_verify_round_trip(db_session: AsyncSession):
     UserRepository, independently of the passlib/bcrypt version conflict.
     Uses the ``bcrypt`` library directly to avoid passlib's broken self-test.
     """
-    plain = "realpassword!"
+    plain = "RealPassword123!"  # meets new password requirements
     hashed = _bcrypt_hash(plain)
 
     repo = UserRepository(db_session)
@@ -299,7 +390,7 @@ async def test_signin_real_bcrypt_hash(db_session: AsyncSession):
     level, exercising the verify path without going through passlib's
     broken CryptContext initialisation.
     """
-    plain = "hunter2secure"
+    plain = "Hunter2Secure!"  # meets new password requirements
     hashed = _bcrypt_hash(plain)
 
     repo = UserRepository(db_session)
@@ -319,7 +410,9 @@ async def test_signin_real_bcrypt_hash(db_session: AsyncSession):
 
 
 @pytest.mark.asyncio
-async def test_signup_password_over_72_bytes_returns_422(db_session: AsyncSession, monkeypatch):
+async def test_signup_password_over_72_bytes_returns_422(
+    db_session: AsyncSession, monkeypatch
+):
     """A password whose UTF-8 encoding exceeds 72 bytes is rejected with 422.
 
     bcrypt silently truncates passwords at 72 bytes; we block this at the
@@ -341,16 +434,23 @@ async def test_signup_password_over_72_bytes_returns_422(db_session: AsyncSessio
 
 
 @pytest.mark.asyncio
-async def test_signup_password_exactly_72_bytes_accepted(db_session: AsyncSession, monkeypatch):
+async def test_signup_password_exactly_72_bytes_accepted(
+    db_session: AsyncSession, monkeypatch
+):
     """A password of exactly 72 bytes is accepted (boundary condition)."""
     client = _make_client(db_session, monkeypatch)
+    # Create a 72-byte password meeting strength requirements
+    pwd_72 = "Exact72BytePass123!Exact72BytePass123!xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    assert len(pwd_72.encode("utf-8")) == 72, (
+        f"Password is {len(pwd_72.encode('utf-8'))} bytes, expected 72"
+    )
     resp = client.post(
         "/api/v1/signup",
         json={
             "fname": "Exact",
             "lname": "Bytes",
             "email": "exact72@example.com",
-            "password": "a" * 72,
+            "password": pwd_72,
         },
     )
     assert resp.status_code == 200
@@ -360,7 +460,9 @@ async def test_signup_password_exactly_72_bytes_accepted(db_session: AsyncSessio
 
 
 @pytest.mark.asyncio
-async def test_signup_integrity_error_returns_400(db_session: AsyncSession, monkeypatch):
+async def test_signup_integrity_error_returns_400(
+    db_session: AsyncSession, monkeypatch
+):
     """If the DB unique constraint fires (race condition), signup returns 400.
 
     Simulates the scenario where user_exists() passes but the INSERT fails
@@ -380,7 +482,7 @@ async def test_signup_integrity_error_returns_400(db_session: AsyncSession, monk
             "fname": "Race",
             "lname": "Condition",
             "email": "race@example.com",
-            "password": "validpass1",
+            "password": "ValidPass123!",  # meets strength requirements
         },
     )
     assert resp.status_code == 400
