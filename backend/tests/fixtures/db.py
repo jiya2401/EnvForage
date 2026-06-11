@@ -1,10 +1,11 @@
 
 # --- Async SQLAlchemy Fixture System ---
-import pytest
 import asyncio
-from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 import logging
+from collections.abc import AsyncGenerator
+
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 logger = logging.getLogger("DBFixtures")
 
@@ -30,16 +31,16 @@ async def engine():
         future=True,
         pool_pre_ping=True
     )
-    
+
     # Ideally, we would create all tables here
     # async with engine.begin() as conn:
     #     await conn.run_sync(Base.metadata.create_all)
-        
+
     yield engine
-    
+
     # async with engine.begin() as conn:
     #     await conn.run_sync(Base.metadata.drop_all)
-        
+
     await engine.dispose()
 
 @pytest.fixture(scope="function")
@@ -51,10 +52,10 @@ async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
     Nested savepoints allow the test to commit internally without affecting the DB.
     """
     connection = await engine.connect()
-    
+
     # Begin a global, non-committing transaction
     transaction = await connection.begin()
-    
+
     # Bind an AsyncSession to the connection
     SessionMaker = async_sessionmaker(
         bind=connection,
@@ -62,9 +63,9 @@ async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
         class_=AsyncSession,
         join_transaction_mode="create_savepoint" # Crucial for isolation
     )
-    
+
     session = SessionMaker()
-    
+
     try:
         # Yield the session to the test
         yield session
@@ -74,10 +75,10 @@ async def db_session(engine) -> AsyncGenerator[AsyncSession, None]:
     finally:
         # Close the session
         await session.close()
-        
+
         # Rollback the global transaction (undoes all test changes)
         await transaction.rollback()
-        
+
         # Return connection to the pool
         await connection.close()
 
@@ -91,5 +92,4 @@ async def mock_user_factory(db_session):
         # await db_session.refresh(user)
         # return user
         return {"id": "mock_uuid", "username": username, "email": email}
-        
     return _create_user
