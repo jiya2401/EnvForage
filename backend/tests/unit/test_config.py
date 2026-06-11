@@ -58,6 +58,7 @@ def test_production_cors_safeguards():
             allowed_origins="https://myproductionapp.com",
             secret_key=DEV_SECRET_KEY,
             admin_api_key="a" * 32,
+            database_url="postgresql+asyncpg://postgres:postgres@db.production.internal:5432/envforge",
         )
 
     # Block Wildcard in Production
@@ -69,18 +70,45 @@ def test_production_cors_safeguards():
             allowed_origins="*",
             secret_key="prod-safe-key-123",
             admin_api_key="a" * 32,
+            database_url="postgresql+asyncpg://postgres:postgres@db.production.internal:5432/envforge",
         )
 
-    # Block default/localhost CORS settings in Production
+    # Block default/localhost CORS settings in Production (including 127.0.0.1)
     with pytest.raises(
         ValidationError,
-        match="Localhost CORS origin 'http://localhost:3000' is not allowed in production",
+        match="Localhost CORS origin 'http://127.0.0.1:3000' is not allowed in production",
     ):
         Settings(
             environment="production",
-            allowed_origins="http://localhost:3000",
+            allowed_origins="http://127.0.0.1:3000",
             secret_key="prod-safe-key-123",
             admin_api_key="a" * 32,
+            database_url="postgresql+asyncpg://postgres:postgres@db.production.internal:5432/envforge",
+        )
+
+    # Block localhost database URLs in Production
+    with pytest.raises(
+        ValidationError,
+        match="Localhost database URL is not allowed in production environment",
+    ):
+        Settings(
+            environment="production",
+            allowed_origins="https://myproductionapp.com",
+            secret_key="prod-safe-key-123",
+            admin_api_key="a" * 32,
+            database_url="postgresql+asyncpg://postgres:postgres@localhost:5432/envforge",
+        )
+
+    with pytest.raises(
+        ValidationError,
+        match="Localhost database URL is not allowed in production environment",
+    ):
+        Settings(
+            environment="production",
+            allowed_origins="https://myproductionapp.com",
+            secret_key="prod-safe-key-123",
+            admin_api_key="a" * 32,
+            database_url="postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/envforge",
         )
 
     # Accept valid production configuration
@@ -89,5 +117,6 @@ def test_production_cors_safeguards():
         allowed_origins="https://myproductionapp.com",
         secret_key="prod-safe-key-123",
         admin_api_key="a" * 32,
+        database_url="postgresql+asyncpg://postgres:postgres@db.production.internal:5432/envforge",
     )
     assert prod_config.allowed_origins_list == ["https://myproductionapp.com"]
