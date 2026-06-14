@@ -428,14 +428,29 @@ def _print_diagnose_response(result: dict) -> None:
     default=False,
     help="Suppress all output except the JSON verification report.",
 )
-def verify(profile: str | None, output: str | None, quiet: bool) -> None:
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    default=False,
+    help="Output only the verification JSON result.",
+)
+def verify(
+    profile: str | None,
+    output: str | None,
+    quiet: bool,
+    json_output: bool,
+) -> None: 
     """
     Verify whether the generated ML environment works after setup.
 
     Checks PyTorch import and, if a GPU profile is detected, CUDA availability.
     Returns a structured PASS/FAIL JSON result.
     """
-    if not quiet:
+    if json_output:
+        quiet = True
+    
+    if not quiet and not json_output:
         console.print(
             Panel(
                 f"[bold cyan]EnvForge Verification Agent[/] v{__version__}\n"
@@ -488,7 +503,7 @@ def verify(profile: str | None, output: str | None, quiet: bool) -> None:
 
         # 3. Analyze checks
         if not data["import_ok"]:
-            if not quiet:
+            if not quiet and not json_output:
                 _print_verification_summary(data, is_gpu_profile=False)
             res = {
                 "status": "FAIL",
@@ -506,7 +521,7 @@ def verify(profile: str | None, output: str | None, quiet: bool) -> None:
             )
 
         if is_gpu_profile and not data["cuda_ok"]:
-            if not quiet:
+            if not quiet and not json_output:
                 _print_verification_summary(data, is_gpu_profile=is_gpu_profile)
             res = {
                 "status": "FAIL",
@@ -523,7 +538,7 @@ def verify(profile: str | None, output: str | None, quiet: bool) -> None:
         else:
             msg += " (CPU only)"
 
-        if not quiet:
+        if not quiet and not json_output:
             _print_verification_summary(data, is_gpu_profile=is_gpu_profile)
 
         res = {"status": "PASS", "message": msg}
