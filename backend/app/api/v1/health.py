@@ -1209,6 +1209,7 @@ class EndpointManager:
         return data.get("id") == 300
 
 # --- Advanced Healthcheck Probe ---
+from datetime import datetime
 from fastapi import APIRouter, Response, status
 from typing import Dict, Any
 import psutil

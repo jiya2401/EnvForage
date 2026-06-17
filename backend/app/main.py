@@ -19,6 +19,7 @@ from app.api.v1 import (
     authentication,
     compatibility,
     diagnose,
+    health as health_v1,
     profiles,
     recommend,
     repair,
@@ -144,6 +145,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_matrix_router, prefix="/api/v1", tags=["admin-matrix"])
     app.include_router(media_upload.router, prefix="/api/v1", tags=["media"])
     app.include_router(spatial_query.router, prefix="/api/v1", tags=["locations"])
+    app.include_router(health_v1.router, prefix="/api/v1", tags=["health"])
 
     # ── Health check ──────────────────────────────────────────
     @app.get("/health", include_in_schema=False)
