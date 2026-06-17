@@ -5,17 +5,16 @@ Use for Kubernetes readiness/liveness probes.
 """
 
 import asyncio
+import datetime
 import logging
+import time
 
+import psutil
 from fastapi import APIRouter, Response, status
 from sqlalchemy import text
 
 from app.api.deps import DB
 from app.cache import get_redis_client
-
-import datetime
-import time
-import psutil
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +133,7 @@ async def deep_health_check(db: DB, response: Response) -> dict:
     metrics = get_system_metrics()
 
     status_str = "healthy"
-    
+
     # Degrade if DB or Redis is down, or if system resources are exhausted
     if (
         db_status["status"] == "down"

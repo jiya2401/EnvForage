@@ -1,3 +1,4 @@
+import sys
 from typing import Any, Literal
 
 from celery import Celery
@@ -11,8 +12,6 @@ from app.compatibility.models import PackageConstraint, ResolvedEnvironment
 from app.compatibility.resolver import CompatibilityResolver
 from app.config import get_settings
 from app.schemas.diagnostic import CompatibilityIssue, DiagnoseResponse
-
-import sys
 
 settings = get_settings()
 
