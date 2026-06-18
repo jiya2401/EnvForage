@@ -18,14 +18,15 @@ from dotenv import load_dotenv
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-load_dotenv()
+if "pytest" not in sys.modules:
+    load_dotenv()
 
 DEV_SECRET_KEY = "dev-secret-key-change-in-production"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=None if "pytest" in sys.modules else ".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -169,6 +170,10 @@ class Settings(BaseSettings):
     # ── Admin API Key ─────────────────────────────────────────
     admin_api_key: str = ""
 
+    # ── Security Safeguards ──────────────────────────────────
+    allow_wildcard_cors_in_production: bool = False
+    allow_localhost_in_production: bool = False
+
     @model_validator(mode="after")
     def validate_secret_key(self) -> "Settings":
         """Enforce strong SECRET_KEY and validate Redis in production environments.
@@ -215,7 +220,17 @@ class Settings(BaseSettings):
         """
                 # Block wildcard CORS origin in production
         if self.environment == "production" and self.allowed_origins == "*":
-            raise ValueError("Wildcard '*' CORS origin is strictly forbidden in production")
+            if not self.allow_wildcard_cors_in_production:
+                raise ValueError(
+                    "Wildcard '*' CORS origin is strictly forbidden in production. "
+                    "Set ALLOW_WILDCARD_CORS_IN_PRODUCTION=true in your environment variables "
+                    "to bypass this check if wildcard CORS is required."
+                )
+            import logging
+            logging.getLogger("app.config").warning(
+                "Wildcard '*' CORS origin is configured in production. "
+                "This allows any website to make requests to your API, which is insecure."
+            )
 
         # Validate localhost CORS origin in production
         if self.environment == "production":
@@ -223,16 +238,30 @@ class Settings(BaseSettings):
                 parsed_origin = urllib.parse.urlparse(origin)
                 hostname = parsed_origin.hostname
                 if hostname in ("localhost", "127.0.0.1", "[::1]", "::1"):
-                    raise ValueError(
-                        f"Localhost CORS origin '{origin}' is not allowed in production"
+                    if not self.allow_localhost_in_production:
+                        raise ValueError(
+                            f"Localhost CORS origin '{origin}' is not allowed in production. "
+                            "Set ALLOW_LOCALHOST_IN_PRODUCTION=true in your environment variables "
+                            "to bypass this check if localhost origins are required."
+                        )
+                    import logging
+                    logging.getLogger("app.config").warning(
+                        f"Localhost CORS origin '{origin}' is configured in production."
                     )
 
             # Block localhost database URLs in production
             parsed_db = urllib.parse.urlparse(self.database_url)
             hostname = parsed_db.hostname
             if hostname in ("localhost", "127.0.0.1", "[::1]", "::1"):
-                raise ValueError(
-                    "Localhost database URL is not allowed in production environment"
+                if not self.allow_localhost_in_production:
+                    raise ValueError(
+                        "Localhost database URL is not allowed in production environment. "
+                        "Set ALLOW_LOCALHOST_IN_PRODUCTION=true in your environment variables "
+                        "to bypass this check if localhost databases are required."
+                    )
+                import logging
+                logging.getLogger("app.config").warning(
+                    "Localhost database URL is configured in production environment."
                 )
 
         # Validate custom_template_dir
