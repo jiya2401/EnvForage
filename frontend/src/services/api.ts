@@ -202,4 +202,60 @@ export const api = {
 		if (!response.ok) throw new Error("Failed to fetch repair templates");
 		return response.json();
 	},
+
+	submitUninstallFeedback: async (request: {
+		rating?: number | null;
+		reasons: string[];
+		comments?: string;
+		email?: string;
+	}): Promise<unknown> => {
+		const response = await fetch(`${API_BASE_URL}/uninstall/feedback`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(request),
+		});
+		if (!response.ok) throw new Error("Failed to submit feedback");
+		return response.json();
+	},
 };
+
+// --- Axios Retry Interceptor ---
+import axios, { AxiosError } from 'axios';
+
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 1000;
+
+export const apiClient = axios.create({
+    baseURL: process.env.NEXT_PUBLIC_API_URL || '/api/v1',
+    timeout: 10000,
+});
+
+apiClient.interceptors.response.use(
+    (response) => response,
+    async (error: AxiosError) => {
+        const config = error.config as typeof error.config & { retryCount?: number };
+        
+        if (!config || !config.retryCount) {
+            config.retryCount = 0;
+        }
+
+        const shouldRetry = 
+            error.response?.status && 
+            error.response.status >= 500 && 
+            config.retryCount < MAX_RETRIES;
+
+        if (shouldRetry) {
+            config.retryCount += 1;
+            const delay = BASE_DELAY_MS * (2 ** (config.retryCount - 1));
+            
+            console.warn(`[API] Transient error. Retrying request (${config.retryCount}/${MAX_RETRIES}) in ${delay}ms...`);
+            
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            return apiClient(config);
+        }
+
+        return Promise.reject(error);
+    }
+);

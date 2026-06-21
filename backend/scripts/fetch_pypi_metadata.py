@@ -1,5 +1,7 @@
 import json
 import sys
+import logging
+logging.basicConfig(level=logging.INFO)
 import urllib.error
 import urllib.request
 
@@ -8,13 +10,13 @@ def fetch_pypi_python_requires(package: str, version: str | None = None) -> None
     """
     Fetches the Requires-Python metadata from PyPI for a given package and version.
     This script is used to automate the verification of Python compatibility matrices.
-    Uses local JSON file-based caching inside `~/.envforge/cache` to optimize performance with a 12-hour TTL.
+    Uses local JSON file-based caching inside `~/.envforage/cache` to optimize performance with a 12-hour TTL.
     """
     import os
     import time
 
-    # Store cache under ~/.envforge/cache per issue #386 spec
-    cache_dir = os.path.expanduser("~/.envforge/cache")
+    # Store cache under ~/.envforage/cache per issue #386 spec
+    cache_dir = os.path.expanduser("~/.envforage/cache")
     os.makedirs(cache_dir, exist_ok=True)
 
     safe_pkg = "".join(c for c in package if c.isalnum() or c in ".-_")
@@ -35,7 +37,7 @@ def fetch_pypi_python_requires(package: str, version: str | None = None) -> None
             if time.time() - mtime < 43200:
                 cache_valid = True
         except Exception as e:
-            print(f"[WARN] Failed to read cache file metadata: {e}")
+            logging.warning(f"Failed to read cache file metadata: {e}")
 
     if cache_valid:
         try:

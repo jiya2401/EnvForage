@@ -10,8 +10,8 @@ that other routes should use to require an authenticated user.
 
 from datetime import UTC, datetime, timedelta
 
+import jwt
 from fastapi import APIRouter, Depends, HTTPException
-from jose import jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.exc import IntegrityError
@@ -58,10 +58,14 @@ class RegData(BaseModel):
             raise ValueError("Password must not exceed 72 bytes (UTF-8 encoded)")
 
         if not any(c.isupper() for c in v):
-            raise ValueError("Password must contain at least one uppercase letter (A-Z)")
+            raise ValueError(
+                "Password must contain at least one uppercase letter (A-Z)"
+            )
 
         if not any(c.islower() for c in v):
-            raise ValueError("Password must contain at least one lowercase letter (a-z)")
+            raise ValueError(
+                "Password must contain at least one lowercase letter (a-z)"
+            )
 
         if not any(c.isdigit() for c in v):
             raise ValueError("Password must contain at least one digit (0-9)")
@@ -105,7 +109,9 @@ class MeResponse(BaseModel):
     summary="Register a new user account",
     responses={
         400: {"description": "Email already registered"},
-        422: {"description": "Validation error (password too weak/long, invalid email)"},
+        422: {
+            "description": "Validation error (password too weak/long, invalid email)"
+        },
         429: {"description": "Rate limit exceeded"},
     },
 )

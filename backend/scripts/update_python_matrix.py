@@ -1,4 +1,6 @@
 import json
+import logging
+logging.basicConfig(level=logging.INFO)
 import sys
 from pathlib import Path
 
@@ -25,8 +27,8 @@ def fetch_pypi_python_bounds(package: str, version: str):
     import os
     import time
 
-    # Store cache under ~/.envforge/cache per issue #386 spec
-    cache_dir = Path(os.path.expanduser("~/.envforge/cache"))
+    # Store cache under ~/.envforage/cache per issue #386 spec
+    cache_dir = Path(os.path.expanduser("~/.envforage/cache"))
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     safe_pkg = "".join(c for c in package if c.isalnum() or c in ".-_")
@@ -43,7 +45,7 @@ def fetch_pypi_python_bounds(package: str, version: str):
             if time.time() - mtime < 43200:
                 cache_valid = True
         except Exception as e:
-            print(f"  [WARN] Failed to read cache file metadata: {e}")
+            logging.warning(f"Failed to read cache file metadata: {e}")
 
     if cache_valid:
         try:

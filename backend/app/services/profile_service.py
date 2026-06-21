@@ -228,13 +228,25 @@ async def get_profile_by_id(
 
 
 async def _invalidate_profile_caches(slug: str | None = None) -> None:
+    """Invalidate profile caches using pipeline for atomic batch deletion."""
     redis = await get_redis_client()
     if not redis:
         return
+
+    keys_to_delete: list[str] = []
     if slug:
-        await redis.delete(f"profiles:slug:{slug}")
-    async for key in redis.scan_iter("profiles:list:*"):
-        await redis.delete(key)
+        keys_to_delete.append(f"profiles:slug:{slug}")
+
+    # Collect list-cache keys (scan is cursor-based and won't block Redis)
+    async for key in redis.scan_iter(match="profiles:list:*", count=100):
+        keys_to_delete.append(key)
+
+    if keys_to_delete:
+        # Pipeline sends all DELETEs in a single round-trip
+        async with redis.pipeline(transaction=False) as pipe:
+            for key in keys_to_delete:
+                pipe.delete(key)
+            await pipe.execute()
 
 
 async def create_profile(
@@ -255,7 +267,10 @@ async def create_profile(
     db.add(db_profile)
     try:
         await db.commit()
-    except Exception:
+    except Exception as e:
+        import logging
+
+        logging.error(f"Profile service error: {e}")
         await db.rollback()
         raise
 
@@ -268,21 +283,30 @@ async def create_profile(
     return profile
 
 
-async def delete_profile(
-    db: AsyncSession,
-    slug: str,
-) -> bool:
-    """Soft delete a profile by slug. Returns True if deleted, False if not found."""
-    profile = await get_profile_by_slug(db, slug)
+async def delete_profile(db: AsyncSession, slug: str) -> bool:
+    # Fetch ORM object directly, NOT from cache
+    result = await db.execute(
+        select(EnvironmentProfile)
+        .where(EnvironmentProfile.slug == slug)
+        .where(EnvironmentProfile.deleted_at.is_(None))
+        .options(selectinload(EnvironmentProfile.packages))
+    )
+    profile = result.scalar_one_or_none()
     if not profile:
         return False
 
     profile.deleted_at = datetime.now(UTC)
     profile.status = "DELETED"
 
+    for pkg in profile.packages:
+        pkg.deleted_at = datetime.now(UTC)
+
     try:
         await db.commit()
-    except Exception:
+    except Exception as e:
+        import logging
+
+        logging.error(f"Profile error 1: {e}")
         await db.rollback()
         raise
 
@@ -301,7 +325,15 @@ async def update_profile(
     If ``packages`` is provided the existing package list is replaced entirely.
     Returns the updated profile, or ``None`` if not found.
     """
-    profile = await get_profile_by_slug(db, slug)
+    # Fetch ORM object directly, NOT from cache — mutations require a real
+    # SQLAlchemy model instance (dicts returned by cache would crash here).
+    result = await db.execute(
+        select(EnvironmentProfile)
+        .where(EnvironmentProfile.slug == slug)
+        .where(EnvironmentProfile.deleted_at.is_(None))
+        .options(selectinload(EnvironmentProfile.packages))
+    )
+    profile = result.scalar_one_or_none()
     if not profile:
         return None
 
@@ -323,7 +355,10 @@ async def update_profile(
 
     try:
         await db.commit()
-    except Exception:
+    except Exception as e:
+        import logging
+
+        logging.error(f"Profile error 2: {e}")
         await db.rollback()
         raise
 

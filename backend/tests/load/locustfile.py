@@ -8,7 +8,7 @@ class TroubleshootUser(HttpUser):
     def troubleshoot_stream(self):
         payload = {
             "diagnostic": {
-                "agent_version": "1.0.0",
+                "agent_version": "2.0.0",
                 "os": {
                     "name": "Ubuntu 22.04",
                     "version": "22.04",
@@ -36,9 +36,7 @@ class TroubleshootUser(HttpUser):
                 },
             },
             "profile_slug": "pytorch-cuda",
-            "user_description": (
-                "CUDA 11.8 incompatible with PyTorch 2.3"
-            ),
+            "user_description": ("CUDA 11.8 incompatible with PyTorch 2.3"),
         }
 
         with self.client.post(
@@ -47,7 +45,6 @@ class TroubleshootUser(HttpUser):
             stream=True,
             catch_response=True,
         ) as response:
-
             chunk_count = 0
 
             try:

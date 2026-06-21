@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import Client from "./Client";
+import Client, { GenerateErrorBoundary } from "./Client";
 
 export const metadata: Metadata = {
 	alternates: {
@@ -8,5 +8,10 @@ export const metadata: Metadata = {
 };
 
 export default function Page() {
-	return <Client />;
+	return (
+		<GenerateErrorBoundary>
+			<Client />
+		</GenerateErrorBoundary>
+	);
 }
+
