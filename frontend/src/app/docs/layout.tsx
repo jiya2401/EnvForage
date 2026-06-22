@@ -83,7 +83,7 @@ const docsNavigation: NavSection[] = [
 	},
 ];
 
-import packageJson from "../../../../package.json";
+import packageJson from "../../../package.json";
 
 const latestVersion = `v${packageJson.version}`;
 
