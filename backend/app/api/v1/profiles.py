@@ -14,6 +14,7 @@ from app.schemas.profile import (
     ProfileFilters,
     ProfileListResponse,
     ProfileSummarySchema,
+    ProfileUpdateSchema,
 )
 from app.services import profile_service
 
@@ -78,7 +79,7 @@ async def list_profiles(
     filters = ProfileFilters(
         tags=tags, os=os, cuda_required=cuda_required, page=page, limit=limit
     )
-    profiles, total = await profile_service.list_profiles(db, filters)
+    profiles, total = await profile_service.list_cached_profiles(db, filters)
 
     return ProfileListResponse(
         profiles=[ProfileSummarySchema.model_validate(p) for p in profiles],
@@ -113,7 +114,7 @@ async def get_profile(
     """
     Get full details for a single environment profile including package list.
     """
-    profile = await profile_service.get_profile_by_slug(db, slug)
+    profile = await profile_service.get_cached_profile_by_slug(db, slug)
     if profile is None:
         raise EntityNotFoundError(
             resource=f"Profile '{slug}'",
@@ -185,6 +186,7 @@ async def delete_profile(
         description="Unique slug of the environment profile to delete.",
         examples=["pytorch-cu121"],
     ),
+    _rate_limit: None = Depends(general_rate_limit),
     _auth: None = Depends(require_admin),
 ) -> None:
     """
@@ -198,3 +200,133 @@ async def delete_profile(
             error_code="PROFILE_NOT_FOUND",
         )
     logger.info("Profile deleted: slug=%s", slug)
+
+
+@router.patch(
+    "/profiles/{slug}",
+    response_model=ProfileDetailSchema,
+    status_code=status.HTTP_200_OK,
+    summary="Update environment profile",
+    description="Partially update an environment profile using its slug. Only the fields provided in the request body are changed.",
+    tags=["Profiles"],
+    responses={
+        200: {"description": "Profile updated successfully."},
+        401: {"description": "Missing or invalid admin API key."},
+        404: {"description": "Profile not found."},
+        422: {"description": "Request validation error."},
+        503: {"description": "Admin API key not configured on this server."},
+    },
+)
+async def update_profile(
+    profile_in: ProfileUpdateSchema,
+    db: DB,
+    slug: str = Path(
+        ...,
+        description="Unique slug of the environment profile to update.",
+        examples=["pytorch-cu121"],
+    ),
+    _rate_limit: None = Depends(general_rate_limit),
+    _auth: None = Depends(require_admin),
+) -> ProfileDetailSchema:
+    """
+    Partially update an environment profile by slug.
+
+    Only the fields included in the request body are modified;
+    omitted fields retain their current values.
+    """
+    logger.info("Admin write: updating profile slug=%s", slug)
+    updated = await profile_service.update_profile(db, slug, profile_in)
+    if updated is None:
+        raise EntityNotFoundError(
+            resource=f"Profile '{slug}'",
+            error_code="PROFILE_NOT_FOUND",
+        )
+    logger.info("Profile updated: slug=%s", slug)
+    return ProfileDetailSchema.model_validate(updated)
+
+
+# --- Specialized UnitOfWork for Profiles ---
+import contextlib
+import logging
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+_uow_logger = logging.getLogger("ProfileUoW")
+
+@contextlib.asynccontextmanager
+async def profile_transaction_boundary(db: AsyncSession):
+    """
+    A robust context manager that ensures atomic profile operations
+    with automatic rollback on failure and explicit commit on success.
+    Prevents race conditions by isolating the transaction.
+    """
+    try:
+        # Start a nested transaction (SAVEPOINT) if supported
+        async with db.begin_nested() as nested:
+            _uow_logger.debug("Entering profile transaction boundary")
+            yield nested
+            # Implicitly commits the nested transaction
+
+    except SQLAlchemyError as e:
+        _uow_logger.error(f"Transaction aborted due to DB error: {e}")
+        # The nested transaction is automatically rolled back
+        raise
+    except Exception as e:
+        _uow_logger.error(f"Transaction aborted due to application error: {e}")
+        raise
+    finally:
+        _uow_logger.debug("Exiting profile transaction boundary")
+
+
+# --- Cursor-Based Pagination Engine ---
+import base64
+from typing import Any, Generic, TypeVar
+
+from pydantic import BaseModel
+from sqlalchemy.sql import Select
+
+T = TypeVar("T")
+
+class CursorPagination(BaseModel, Generic[T]):
+    items: list[T]
+    next_cursor: str | None = None
+    has_more: bool = False
+
+class PaginationEngine:
+    @staticmethod
+    def encode_cursor(value: str) -> str:
+        return base64.urlsafe_b64encode(value.encode('utf-8')).decode('utf-8')
+
+    @staticmethod
+    def decode_cursor(cursor: str) -> str:
+        try:
+            return base64.urlsafe_b64decode(cursor.encode('utf-8')).decode('utf-8')
+        except Exception:
+            raise ValueError("Invalid cursor format")
+
+    @staticmethod
+    def apply_cursor(stmt: Select, sort_column, cursor_value: str | None, sort_desc: bool = True):
+        """Applies cursor WHERE clause safely to SQLAlchemy statements."""
+        if cursor_value:
+            decoded = PaginationEngine.decode_cursor(cursor_value)
+            if sort_desc:
+                return stmt.where(sort_column < decoded)
+            else:
+                return stmt.where(sort_column > decoded)
+        return stmt
+
+    @staticmethod
+    def build_response(items: list[Any], limit: int, cursor_attr: str) -> CursorPagination:
+        has_more = len(items) > limit
+        if has_more:
+            items = items[:limit]
+            last_item = items[-1]
+            next_cursor = PaginationEngine.encode_cursor(str(getattr(last_item, cursor_attr)))
+        else:
+            next_cursor = None
+
+        return CursorPagination(
+            items=items,
+            next_cursor=next_cursor,
+            has_more=has_more
+        )

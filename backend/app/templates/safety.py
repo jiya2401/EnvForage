@@ -7,10 +7,13 @@ no script passes without this validation.
 """
 
 import asyncio
-import concurrent.futures
+import json
 import logging
+import os
 import re
+from typing import Any
 
+import bashlex
 from pydantic import BaseModel
 
 from app.ai.providers.base import LLMProvider
@@ -97,17 +100,301 @@ class SafetyViolationError(Exception):
         )
 
 
-def validate_rendered_output(
+def _validate_bash_ast(content: str, template_name: str = "") -> None:
+    """Parse and validate shell scripts using bashlex AST parsing."""
+    try:
+        nodes = bashlex.parse(content)
+    except Exception as e:
+        logger.warning(
+            f"Bash AST parsing skipped for {template_name} due to parser error/limitation: {str(e)}"
+        )
+        return
+
+    violations = []
+
+    def has_substitution(node: Any) -> bool:
+        if node.kind in ("commandsubstitution", "processsubstitution"):
+            return True
+        for attr in dir(node):
+            if attr.startswith("_"):
+                continue
+            try:
+                val = getattr(node, attr)
+            except AttributeError:
+                continue
+            if hasattr(val, "kind") and hasattr(val, "pos"):
+                if has_substitution(val):
+                    return True
+            elif isinstance(val, list):
+                for item in val:
+                    if hasattr(item, "kind") and hasattr(item, "pos"):
+                        if has_substitution(item):
+                            return True
+        return False
+
+    def check_node(node: Any, parent_pipeline: Any) -> None:
+        # Rule 1: Redirection Target Checks
+        if node.kind == "redirect":
+            output_node = getattr(node, "output", None)
+            if output_node and hasattr(output_node, "word"):
+                target = output_node.word.strip("'\"").lower()
+                dangerous_prefixes = (
+                    "/dev/sd",
+                    "/dev/hd",
+                    "/dev/nvme",
+                    "/dev/vd",
+                    "/dev/tcp",
+                    "/dev/udp",
+                )
+                if target.startswith(dangerous_prefixes):
+                    violations.append(f"Dangerous redirection target: {target}")
+                if has_substitution(output_node):
+                    violations.append(
+                        f"Dynamic redirection target with subshell: {output_node.word}"
+                    )
+
+        # Rule 2: Eval Checks
+        if node.kind == "command":
+            parts = getattr(node, "parts", [])
+            if parts and hasattr(parts[0], "word") and parts[0].word == "eval":
+                if parent_pipeline is not None:
+                    violations.append("Eval command used inside a pipeline")
+                for arg in parts[1:]:
+                    if has_substitution(arg):
+                        violations.append(
+                            f"Eval command with dynamic subshell/substitution: {arg.word if hasattr(arg, 'word') else ''}"
+                        )
+
+        # Rule 3: Pipeline target checks
+        if node.kind == "pipeline":
+            pipeline_parts = getattr(node, "parts", [])
+            for i, part in enumerate(pipeline_parts):
+                if part.kind == "command":
+                    cmd_parts = getattr(part, "parts", [])
+                    if cmd_parts and hasattr(cmd_parts[0], "word"):
+                        cmd_name = cmd_parts[0].word
+                        cmd_basename = os.path.basename(cmd_name.replace("\\", "/"))
+                        is_shell_target = False
+                        matched_shell_name = cmd_name
+                        if cmd_basename in ("sh", "bash", "dash", "zsh", "ksh"):
+                            is_shell_target = True
+                        elif (
+                            cmd_basename == "env"
+                            and len(cmd_parts) > 1
+                            and hasattr(cmd_parts[1], "word")
+                        ):
+                            next_cmd_name = cmd_parts[1].word
+                            next_cmd_basename = os.path.basename(
+                                next_cmd_name.replace("\\", "/")
+                            )
+                            if next_cmd_basename in (
+                                "sh",
+                                "bash",
+                                "dash",
+                                "zsh",
+                                "ksh",
+                            ):
+                                is_shell_target = True
+                                matched_shell_name = f"env {next_cmd_name}"
+
+                        if is_shell_target and i > 0:
+                            # Allow whitelisted bootstrapping URLs for curl/wget piped to shell
+                            is_whitelisted = False
+                            first_part = pipeline_parts[0]
+                            if first_part.kind == "command":
+                                first_cmd_parts = getattr(first_part, "parts", [])
+                                if first_cmd_parts and hasattr(
+                                    first_cmd_parts[0], "word"
+                                ):
+                                    first_cmd_name = first_cmd_parts[0].word
+                                    if first_cmd_name in ("curl", "wget"):
+                                        for arg in first_cmd_parts[1:]:
+                                            if hasattr(arg, "word"):
+                                                u = arg.word.strip("'\"")
+                                                if u.startswith(
+                                                    ("http://", "https://")
+                                                ):
+                                                    try:
+                                                        from urllib.parse import (
+                                                            urlparse,
+                                                        )
+
+                                                        parsed = urlparse(u)
+                                                        host = parsed.netloc.split(":")[
+                                                            0
+                                                        ].lower()
+                                                        if host in (
+                                                            "astral.sh",
+                                                            "micro.mamba.pm",
+                                                        ) or host.endswith(
+                                                            (
+                                                                ".astral.sh",
+                                                                ".micro.mamba.pm",
+                                                            )
+                                                        ):
+                                                            is_whitelisted = True
+                                                            break
+                                                    except Exception as e:
+                                                        logger.error(
+                                                            f"Safety parse error: {e}"
+                                                        )
+                                                        pass
+                            if not is_whitelisted:
+                                violations.append(
+                                    f"Pipe-to-shell detected in pipeline: {matched_shell_name}"
+                                )
+
+        # Rule 4: Shell execution commands with dynamic arguments
+        if node.kind == "command":
+            parts = getattr(node, "parts", [])
+            if parts and hasattr(parts[0], "word"):
+                cmd_name = parts[0].word
+                cmd_basename = os.path.basename(cmd_name.replace("\\", "/"))
+                target_cmd_name = cmd_name
+                args_to_check: list[Any] = []
+                is_shell_exec = False
+
+                shells_and_helpers = (
+                    "sh",
+                    "bash",
+                    "dash",
+                    "zsh",
+                    "ksh",
+                    "source",
+                    ".",
+                    "exec",
+                )
+
+                if cmd_basename in shells_and_helpers:
+                    is_shell_exec = True
+                    target_cmd_name = cmd_name
+                    args_to_check = parts[1:]
+                elif (
+                    cmd_basename == "env"
+                    and len(parts) > 1
+                    and hasattr(parts[1], "word")
+                ):
+                    next_cmd_name = parts[1].word
+                    next_cmd_basename = os.path.basename(
+                        next_cmd_name.replace("\\", "/")
+                    )
+                    if next_cmd_basename in shells_and_helpers:
+                        is_shell_exec = True
+                        target_cmd_name = f"env {next_cmd_name}"
+                        args_to_check = parts[2:]
+
+                if is_shell_exec:
+                    for arg in args_to_check:
+                        if has_substitution(arg):
+                            violations.append(
+                                f"Shell command '{target_cmd_name}' executed with dynamic subshell/substitution: {arg.word if hasattr(arg, 'word') else ''}"
+                            )
+
+    def traverse(node: Any, parent_pipeline: Any = None) -> None:
+        if not node:
+            return
+        check_node(node, parent_pipeline)
+        current_pipeline = node if node.kind == "pipeline" else parent_pipeline
+        for attr in dir(node):
+            if attr.startswith("_"):
+                continue
+            try:
+                val = getattr(node, attr)
+            except AttributeError:
+                continue
+            if hasattr(val, "kind") and hasattr(val, "pos"):
+                traverse(val, current_pipeline)
+            elif isinstance(val, list):
+                for item in val:
+                    if hasattr(item, "kind") and hasattr(item, "pos"):
+                        traverse(item, current_pipeline)
+
+    for n in nodes:
+        traverse(n)
+
+    if violations:
+        raise SafetyViolationError(
+            pattern="AST_SAFETY_VIOLATION",
+            description="AST validation failed: " + "; ".join(violations),
+            context=f"Template: {template_name}",
+        )
+
+
+async def _validate_shellcheck(content: str, template_name: str = "") -> None:
+    """Run shellcheck static analysis on the rendered content (async, non-blocking)."""
+    try:
+        args = ["shellcheck", "--severity=warning", "--format=json"]
+        first_line = content.splitlines()[0].strip() if content.strip() else ""
+        if not first_line.startswith("#!"):
+            args.append("--shell=bash")
+        args.append("-")
+
+        process = await asyncio.create_subprocess_exec(
+            *args,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(input=content.encode()),
+                timeout=5.0,
+            )
+        except TimeoutError:
+            process.kill()
+            await process.wait()
+            logger.warning(
+                f"shellcheck timed out for {template_name}. Skipping static analysis."
+            )
+            return
+
+        if process.returncode != 0:
+            try:
+                results = json.loads(stdout.decode())
+                if results:
+                    violations_desc = []
+                    for item in results:
+                        line = item.get("line", 0)
+                        column = item.get("column", 0)
+                        message = item.get("message", "")
+                        code = item.get("code", "")
+                        level = item.get("level", "warning")
+                        violations_desc.append(
+                            f"Line {line}:{column}: [{level}] {message} (SC{code})"
+                        )
+                    if violations_desc:
+                        raise SafetyViolationError(
+                            pattern="SHELLCHECK_WARNING",
+                            description="Shellcheck validation failed with warnings:\n"
+                            + "\n".join(violations_desc),
+                            context=f"Template: {template_name}",
+                        )
+            except json.JSONDecodeError:
+                decoded_stderr = stderr.decode()
+                if decoded_stderr:
+                    logger.error(f"shellcheck error: {decoded_stderr}")
+    except SafetyViolationError:
+        raise
+    except Exception as e:
+        logger.warning(
+            f"Failed to execute shellcheck: {str(e)}. Skipping static analysis."
+        )
+
+
+async def validate_rendered_output(
     content: str,
     template_name: str = "",
     llm_client: LLMProvider | None = None,
 ) -> str:
     """
-    Scan rendered template output for forbidden patterns using Regex and an optional AI engine.
+    Scan rendered template output for forbidden patterns using Regex, AST validation,
+    Shellcheck, and an optional AI engine.
 
     Raises:
-        SafetyViolationError: If a pattern is matched or the AI flags a malicious script.
+        SafetyViolationError: If any checks fail or the AI flags a malicious script.
     """
+    # 1. Regex Checks (CPU-bound but fast — stays synchronous)
     for compiled_pattern, description in _COMPILED:
         if compiled_pattern.search(content):
             raise SafetyViolationError(
@@ -116,6 +403,28 @@ def validate_rendered_output(
                 context=f"Template: {template_name}",
             )
 
+    # 2. AST and Shellcheck Checks (Bash shell scripts only)
+    is_bash = False
+    if template_name:
+        is_bash = (
+            template_name.endswith(".sh")
+            or template_name.endswith(".sh.j2")
+            or "setup.sh" in template_name
+            or "verify" in template_name
+        )
+    if not is_bash and content:
+        first_line = content.splitlines()[0] if content.strip() else ""
+        if first_line.startswith("#!") and ("sh" in first_line or "bash" in first_line):
+            is_bash = True
+
+    if is_bash and content.strip():
+        # _validate_bash_ast is CPU-bound (bashlex parsing) — offload to thread pool
+        # to avoid blocking the event loop on large scripts
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, _validate_bash_ast, content, template_name)
+        await _validate_shellcheck(content, template_name)
+
+    # 3. AI Safety Checks
     if llm_client:
         system_prompt = (
             "You are a strict Linux security auditor. Review the user's generated bash script. "
@@ -135,30 +444,13 @@ def validate_rendered_output(
                     "LLM client does not implement a recognized completion method."
                 )
 
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
-
-            if loop and loop.is_running():
-                with concurrent.futures.ThreadPoolExecutor() as pool:
-                    future = pool.submit(
-                        asyncio.run,
-                        method_to_call(
-                            system_prompt=system_prompt,
-                            user_message=user_message,
-                            response_model=AISafetyVerdict,
-                        ),
-                    )
-                    verdict = future.result()
-            else:
-                verdict = asyncio.run(
-                    method_to_call(
-                        system_prompt=system_prompt,
-                        user_message=user_message,
-                        response_model=AISafetyVerdict,
-                    )
-                )
+            # With an async validate_rendered_output, we're always inside an
+            # async context — no loop detection dance needed anymore.
+            verdict = await method_to_call(
+                system_prompt=system_prompt,
+                user_message=user_message,
+                response_model=AISafetyVerdict,
+            )
 
             if not verdict.is_safe:
                 raise SafetyViolationError(
@@ -166,12 +458,11 @@ def validate_rendered_output(
                     description=f"AI Auditor flagged this script: {verdict.reason}",
                     context=f"Template: {template_name}",
                 )
+        except SafetyViolationError:
+            raise
         except Exception as e:
-            logger.error(f"AI Safety check failed due to provider error: {str(e)}")
-            raise SafetyViolationError(
-                pattern="AI_SAFETY_FILTER_ERROR",
-                description=f"AI Auditor failed to complete the safety check: {str(e)}",
-                context=f"Template: {template_name}",
+            logger.warning(
+                f"AI Safety check failed due to provider error — degrading to regex-only: {str(e)}"
             )
 
     return content

@@ -135,7 +135,7 @@ class InMemoryBackend(RateLimitBackend):
         now = time.monotonic()
         empty_keys = [
             key
-            for key, timestamps in self._requests.items()
+            for key, timestamps in list(self._requests.items())
             if not timestamps or max(timestamps) < now - 300
         ]
         for key in empty_keys:
@@ -300,17 +300,23 @@ class RateLimiter:
 
         try:
             allowed, info = await self.backend.is_allowed(
-                key, self.max_requests, self.window_seconds,
+                key,
+                self.max_requests,
+                self.window_seconds,
             )
         except Exception as exc:
             if isinstance(exc, (RedisConnError, RedisTimeout)):
                 logger.warning(
                     "Redis connection error during rate limit check for %s on %s "
                     "— falling back to in-memory backend. Error: %s",
-                    client_ip, request.url.path, exc,
+                    client_ip,
+                    request.url.path,
+                    exc,
                 )
                 allowed, info = await _fallback_backend.is_allowed(
-                    key, self.max_requests, self.window_seconds,
+                    key,
+                    self.max_requests,
+                    self.window_seconds,
                 )
             else:
                 # Non-Redis exception (programming bug, etc.) — re-raise so it
@@ -363,3 +369,13 @@ repair_rate_limit = RateLimiter(max_requests=20, window_seconds=60)
 
 # General API: 60 requests per minute
 general_rate_limit = RateLimiter(max_requests=60, window_seconds=60)
+
+# Auth endpoints (/signup, /signin).
+# Reads max_requests from settings.rate_limit_auth_rpm (default 20 rpm) so
+# operators can tune the limit without a code change.  Uses a separate
+# limiter instance so auth traffic never competes with general-API quota.
+_auth_settings = get_settings()
+auth_rate_limit = RateLimiter(
+    max_requests=_auth_settings.rate_limit_auth_rpm,
+    window_seconds=60,
+)

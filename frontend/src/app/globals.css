@@ -70,8 +70,8 @@
 
 	--brand-primary: #0f172a; /* Deep navy for primary buttons */
 	--brand-primary-hover: #1e293b;
-	--brand-secondary: #facc15; /* Vibrant yellow */
-	--brand-accent: #facc15; /* Vibrant yellow */
+	--brand-secondary: #7c3aed; /* Rich violet for high contrast readability */
+	--brand-accent: #7c3aed; /* Rich violet for high contrast readability */
 
 	--highlight-strip: #f9d89b; /* Soft golden yellow */
 
@@ -386,6 +386,9 @@ a:hover {
   .hero-title {
     font-size: clamp(2.5rem, 10vw, 4rem) !important;
   }
+  .hero-subtitle {
+    font-size: 1rem !important;
+  }
 }
 
 /* Navbar specific */
@@ -419,22 +422,28 @@ a:hover {
   padding: 0.5rem;
 }
 
-@media (max-width: 768px) {
-  .nav-brand { 
-    gap: 1rem; 
+@media (max-width: 1024px) {
+  .nav-container {
+    padding: 0.85rem 1.25rem !important;
   }
-  .nav-links-desktop { 
-    display: none; 
+  .nav-brand {
+    gap: 1rem;
   }
-  .mobile-menu-btn { 
-    display: flex; 
-    align-items: center; 
-    justify-content: center; 
+  .nav-links-desktop {
+    display: none;
+  }
+  .nav-hide {
+    display: none !important;
+  }
+  .mobile-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
   .mobile-menu-overlay {
     background: var(--bg-primary);
     border-bottom: 1px solid var(--border-subtle);
-    padding: 1.5rem;
+    padding: 1.5rem 1.25rem;
     display: flex;
     flex-direction: column;
     gap: 1.25rem;
@@ -443,6 +452,19 @@ a:hover {
 }
 
 /* Footer specific */
+
+.footer-link {
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.2s ease, transform 0.2s ease;
+  display: inline-block;
+}
+
+.footer-link:hover {
+  color: #22c55e;
+  transform: translateX(4px);
+}
+
 .footer-grid {
   display: flex;
   flex-wrap: wrap;

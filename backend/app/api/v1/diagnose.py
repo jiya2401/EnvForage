@@ -1,6 +1,5 @@
 """Diagnose endpoint -- POST /api/v1/diagnose and POST /api/v1/diagnose/explain."""
 
-import asyncio
 import hashlib
 import json
 import logging
@@ -14,27 +13,20 @@ from app.ai.prompts.system import EXPLAIN_SYSTEM_PROMPT
 from app.ai.providers import get_provider
 from app.ai.providers.base import LLMProviderError
 from app.api.deps import DB
-from app.compatibility.errors import (
-    IncompatibilityError,
-    UnknownVersionError,
-    UnsupportedOSError,
-)
-from app.compatibility.models import OSTarget, PackageConstraint, ResolvedEnvironment
-from app.compatibility.resolver import CompatibilityResolver
+from app.compatibility.models import OSTarget
 from app.core.exceptions import AIServiceUnavailableError, InternalServerError
 from app.middleware.rate_limit import ai_rate_limit
 from app.models.ai_session import AIAuditLog
 from app.models.diagnostic import DiagnosticReport
-from app.models.profile import EnvironmentProfile
 from app.schemas.ai import DiagnoseExplainResponse
 from app.schemas.diagnostic import (
-    CompatibilityIssue,
     DiagnoseResponse,
+    DiagnoseTaskStatus,
     DiagnosticReportSchema,
+    TaskResponse,
 )
-from app.schemas.profile import ProfileFilters
-from app.services.profile_service import list_profiles
 from app.templates.safety import SafetyViolationError, validate_rendered_output
+from app.worker import run_diagnose_task
 
 logger = logging.getLogger(__name__)
 
@@ -45,23 +37,19 @@ router = APIRouter()
 # accumulates all pages before running the resolver.
 _PROFILE_PAGE_SIZE = 100
 
-# Limit concurrency to 5 threads globally across all requests to avoid memory spikes under heavy load
-_RESOLVER_SEMAPHORE = asyncio.Semaphore(5)
-
 
 @router.post(
     "/diagnose",
-    response_model=DiagnoseResponse,
-    status_code=201,
-    summary="Analyze environment compatibility",
+    response_model=TaskResponse,
+    status_code=202,
+    summary="Analyze environment compatibility (Async)",
     description=(
-        "Accept a diagnostic report from the EnvForge CLI agent and return "
-        "a compatibility analysis showing compatible profiles, detected issues, "
-        "and recommendations."
+        "Accept a diagnostic report from the EnvForage CLI agent, dispatch a Celery task, "
+        "and return a task_id for polling."
     ),
     tags=["Diagnostics"],
     responses={
-        201: {"description": "Diagnostic report analyzed successfully"},
+        202: {"description": "Diagnostic report queued successfully"},
         422: {"description": "Invalid diagnostic report payload"},
         500: {"description": "Internal server error"},
     },
@@ -70,11 +58,10 @@ async def diagnose(
     report: DiagnosticReportSchema,
     db: DB,
     _rate_limit: None = Depends(ai_rate_limit),
-) -> DiagnoseResponse:
+) -> TaskResponse:
     """
-    Accept a DiagnosticReport from the CLI agent and return
-    a compatibility analysis: which profiles are compatible,
-    and what issues were found.
+    Accept a DiagnosticReport from the CLI agent, offload compatibility
+    analysis to Celery, and return a task ID.
     """
     # Map OS to OSTarget: "LINUX", "WSL", "WIN"
     target_os: OSTarget
@@ -93,124 +80,59 @@ async def diagnose(
         gpu_name=report.gpus[0].name if report.gpus else None,
         cuda_version=report.cuda.version if report.cuda else None,
         rocm_version=report.rocm.version if report.rocm else None,
-        python_version=".".join(report.active_python.version.split(".")[:2])
-        if report.active_python
-        else None,
+        python_version=(
+            ".".join(report.active_python.version.split(".")[:2])
+            if report.active_python
+            else None
+        ),
         driver_version=report.gpus[0].driver_version if report.gpus else None,
         created_at=datetime.now(UTC),
     )
     db.add(db_report)
-    await db.flush()
+    await db.commit()
 
-    # Fetch every profile using pagination so profiles beyond the first page
-    # are not silently omitted from the compatibility analysis.
-    all_profiles = []
-    page = 1
-    while True:
-        batch, total = await list_profiles(
-            db,
-            ProfileFilters(
-                tags=None,
-                os=None,
-                cuda_required=None,
-                page=page,
-                limit=_PROFILE_PAGE_SIZE,
-            ),
-        )
-        all_profiles.extend(batch)
-        if len(all_profiles) >= total:
-            break
-        page += 1
-
-    if not all_profiles:
-        return DiagnoseResponse(
-            report_id=str(db_report.id),
-            compatible_profiles=[],
-            issues=[],
-            recommendations=[],
-        )
-
-    resolver = CompatibilityResolver()
-
-    issues: list[CompatibilityIssue] = []
-    compatible_profiles: list[str] = []
-    recommendations: list[str] = []
-
-    # CompatibilityResolver.resolve() is a CPU-bound synchronous function.
-    # Calling it directly inside an async handler blocks the event loop for
-    # the duration of every resolve call. Under concurrent load, all other
-    # requests queue behind the resolver. Each call is offloaded to a thread
-    # via asyncio.to_thread so the event loop stays free.
-    async def _resolve(profile: EnvironmentProfile) -> ResolvedEnvironment:
-        packages = [
-            PackageConstraint(
-                name=package.package_name,
-                version_spec=package.version_spec,
-                cuda_variant=package.cuda_variant,
-            )
-            for package in sorted(profile.packages, key=lambda item: item.install_order)
-        ]
-        async with _RESOLVER_SEMAPHORE:
-            return await resolver.resolve(
-                packages=packages,
-                python_version=(
-                    report.active_python.version if report.active_python else None
-                )
-                or "3.10",
-                cuda_version=report.cuda.version if report.cuda else None,
-                rocm_version=report.rocm.version if report.rocm else None,
-                target_os=target_os,
-                profile_slug=profile.slug,
-                os_support=profile.os_support,
-                cuda_required=profile.cuda_required,
-                rocm_required=getattr(profile, "rocm_required", False),
-                db=db,
-            )
-
-    results = await asyncio.gather(
-        *[_resolve(p) for p in all_profiles],
-        return_exceptions=True,
+    task = run_diagnose_task.delay(
+        str(db_report.id),
+        report.model_dump(),
+        target_os,
     )
 
-    for profile, result in zip(all_profiles, results):
-        if isinstance(result, IncompatibilityError):
-            issues.append(
-                CompatibilityIssue(
-                    severity="ERROR",
-                    component=result.component,
-                    message=str(result),
-                    suggested_fix=result.suggestion,
-                    docs_url=result.docs_url,
-                )
-            )
-        elif isinstance(result, (UnknownVersionError, UnsupportedOSError)):
-            issues.append(
-                CompatibilityIssue(
-                    severity="ERROR",
-                    component="compatibility",
-                    message=str(result),
-                    suggested_fix=None,
-                    docs_url=None,
-                )
-            )
-        elif isinstance(result, Exception):
-            logger.warning(
-                "Resolver raised unexpected error for profile %s: %s",
-                profile.slug,
-                result,
+    return TaskResponse(task_id=task.id, status=task.status)
+
+
+@router.get(
+    "/diagnose/status/{task_id}",
+    response_model=DiagnoseTaskStatus,
+    summary="Poll diagnostic task status",
+    tags=["Diagnostics"],
+)
+async def diagnose_status(task_id: str) -> DiagnoseTaskStatus:
+    """Check the status of a queued diagnostic analysis."""
+    # Validate task_id format before querying Celery/Redis
+    try:
+        uuid.UUID(task_id)
+    except ValueError:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "INVALID_TASK_ID", "message": "task_id must be a valid UUID."},
+        )
+
+    from app.worker import celery_app
+
+    result = celery_app.AsyncResult(task_id)
+    if result.ready():
+        if result.successful():
+            return DiagnoseTaskStatus(
+                task_id=task_id,
+                status=result.status,
+                result=DiagnoseResponse(**result.result),
             )
         else:
-            assert isinstance(result, ResolvedEnvironment)
-            compatible_profiles.append(profile.slug)
-            if result.warnings:
-                recommendations.extend(result.warnings)
-
-    return DiagnoseResponse(
-        report_id=str(db_report.id),
-        compatible_profiles=compatible_profiles,
-        issues=issues,
-        recommendations=recommendations,
-    )
+            return DiagnoseTaskStatus(
+                task_id=task_id, status=result.status, error=str(result.result)
+            )
+    return DiagnoseTaskStatus(task_id=task_id, status=result.status)
 
 
 @router.post(
@@ -262,7 +184,7 @@ async def diagnose_explain(
         )
     except LLMProviderError as exc:
         latency_ms = int((time.monotonic() - start_time) * 1000)
-        _log_explain_audit(
+        await _log_explain_audit(
             db, input_hash, False, str(exc), provider_name, 0, latency_ms
         )
         raise AIServiceUnavailableError(
@@ -272,13 +194,13 @@ async def diagnose_explain(
 
     # Safety filter: validate all text fields before returning to user
     try:
-        validate_rendered_output(llm_result.issue_summary, "ai_explain_summary")
-        validate_rendered_output(llm_result.root_cause, "ai_explain_root_cause")
+        await validate_rendered_output(llm_result.issue_summary, "ai_explain_summary")
+        await validate_rendered_output(llm_result.root_cause, "ai_explain_root_cause")
         for step in llm_result.suggested_steps:
-            validate_rendered_output(step, "ai_explain_step")
+            await validate_rendered_output(step, "ai_explain_step")
     except SafetyViolationError as exc:
         latency_ms = int((time.monotonic() - start_time) * 1000)
-        _log_explain_audit(
+        await _log_explain_audit(
             db, input_hash, False, str(exc), provider_name, 0, latency_ms
         )
         raise InternalServerError(
@@ -286,12 +208,12 @@ async def diagnose_explain(
         ) from exc
 
     latency_ms = int((time.monotonic() - start_time) * 1000)
-    _log_explain_audit(db, input_hash, True, None, provider_name, 0, latency_ms)
+    await _log_explain_audit(db, input_hash, True, None, provider_name, 0, latency_ms)
 
     return llm_result
 
 
-def _log_explain_audit(
+async def _log_explain_audit(
     db: "DB",
     input_hash: str,
     safety_passed: bool,
@@ -314,5 +236,10 @@ def _log_explain_audit(
             created_at=datetime.now(UTC),
         )
         db.add(log)
+        await db.commit()
     except Exception as exc:
         logger.exception("Failed to write explain audit log: %s", exc)
+        try:
+            await db.rollback()
+        except Exception:
+            pass

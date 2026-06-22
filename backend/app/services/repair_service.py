@@ -39,7 +39,7 @@ REPAIR_TEMPLATE_MAP: dict[str, str] = {
 
 # ── Default context values ────────────────────────────────────────────────────
 _DEFAULT_CONTEXT: dict[str, Any] = {
-    "envforge_version": "0.4.0",
+    "envforage_version": "0.4.0",
     "generated_at": "",  # Filled at render time
 }
 
@@ -124,6 +124,15 @@ def _validate_params(template_id: str, params: dict[str, Any]) -> None:
                 raise ValueError(
                     f"Param '{key}' value {value!r} does not match allowed pattern {pattern!r}"
                 )
+            # Reject absolute paths and traversal sequences for
+            # filesystem-sensitive parameters (prevents venv_dir=/etc,
+            # python_bin=../../bin/sh, etc.)
+            if key in ("venv_dir", "python_bin"):
+                if value.startswith("/") or value.startswith("~") or ".." in value:
+                    raise ValueError(
+                        f"Param '{key}' must be a relative path without "
+                        f"'..' or leading '/' or '~': {value!r}"
+                    )
 
 
 def _build_repair_env() -> SandboxedEnvironment:
@@ -168,7 +177,7 @@ class RepairService:
         })
     """
 
-    def render_repair(
+    async def render_repair(
         self,
         template_id: str,
         params: dict[str, Any] | None = None,
@@ -212,7 +221,7 @@ class RepairService:
         rendered = template.render(**context)
 
         # Safety filter
-        safe_content = validate_rendered_output(
+        safe_content = await validate_rendered_output(
             rendered, template_name=f"repair/{template_filename}"
         )
 

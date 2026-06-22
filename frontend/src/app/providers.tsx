@@ -1,7 +1,7 @@
 "use client";
 
+import React, { createContext, useContext, useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
-import { createContext, useContext, useEffect, useState } from "react";
 
 // Create a context to share theme state across components
 const ThemeContext = createContext<{
@@ -16,6 +16,30 @@ export function useTheme() {
 		throw new Error("useTheme must be used within ThemeProvider");
 	}
 	return context;
+}
+
+function getInitialTheme(): "dark" | "light" | "system" {
+	if (typeof window === "undefined") {
+		return "light";
+	}
+
+	const storedTheme = localStorage.getItem("theme");
+
+	if (
+		storedTheme === "dark" ||
+		storedTheme === "light" ||
+		storedTheme === "system"
+	) {
+		return storedTheme;
+	}
+
+	const currentTheme = document.documentElement.getAttribute("data-theme");
+
+	if (currentTheme === "dark" || currentTheme === "light") {
+		return currentTheme;
+	}
+
+	return "light";
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -52,6 +76,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 			applyTheme(storedTheme);
 		} else {
 			// Default to dark mode
+			setTheme("dark");
 			applyTheme("dark");
 		}
 	}, []);
@@ -89,3 +114,60 @@ export function ThemeToggle() {
 		</button>
 	);
 }
+
+
+// --- Advanced System Preference Media Listener ---
+export function useSystemThemePreference() {
+    const [systemTheme, setSystemTheme] = React.useState<'dark' | 'light'>('dark');
+
+    React.useEffect(() => {
+        if (typeof window === 'undefined') return;
+        
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        const handleChange = (e: MediaQueryListEvent) => {
+            const newTheme = e.matches ? 'dark' : 'light';
+            setSystemTheme(newTheme);
+            document.documentElement.setAttribute('data-system-theme', newTheme);
+            
+            // Sync with other tabs if needed
+            try {
+                localStorage.setItem('system-theme-snapshot', newTheme);
+                window.dispatchEvent(new Event('system-theme-change'));
+            } catch {}
+        };
+
+        // Initial setup
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSystemTheme(mediaQuery.matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-system-theme', mediaQuery.matches ? 'dark' : 'light');
+
+        // Add listener safely
+        if (mediaQuery.addEventListener) {
+            mediaQuery.addEventListener('change', handleChange);
+        } else {
+            mediaQuery.addListener(handleChange);
+        }
+
+        return () => {
+            if (mediaQuery.removeEventListener) {
+                mediaQuery.removeEventListener('change', handleChange);
+            } else {
+                mediaQuery.removeListener(handleChange);
+            }
+        };
+    }, []);
+
+    return systemTheme;
+}
+
+export const ThemeSyncManager = {
+    forceSync: () => {
+        if (typeof window !== 'undefined') {
+            const current = localStorage.getItem('theme');
+            if (current) {
+                document.documentElement.className = current;
+            }
+        }
+    }
+};
+

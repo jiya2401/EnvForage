@@ -51,17 +51,9 @@ from app.models.matrix import (
 
 logger = logging.getLogger(__name__)
 
-# Local in-memory caches to store dataclasses compiled from database models
-_CACHE_CUDA: dict[str, CUDAMatrixEntry | None] = {}
-_CACHE_ROCM: dict[str, ROCMMatrixEntry | None] = {}
-_CACHE_FRAMEWORK: dict[str, list[FrameworkVersionEntry]] = {}
-
 
 async def clear_compatibility_cache() -> None:
-    """Clear all in-memory and Redis compatibility matrix caches."""
-    _CACHE_CUDA.clear()
-    _CACHE_ROCM.clear()
-    _CACHE_FRAMEWORK.clear()
+    """Clear all Redis compatibility matrix caches."""
 
     try:
         from app.cache import get_redis_client
@@ -94,8 +86,6 @@ class CompatibilityResolver:
         self, db: AsyncSession | None, version: str
     ) -> CUDAMatrixEntry | None:
         if db is not None:
-            if version in _CACHE_CUDA:
-                return _CACHE_CUDA[version]
             try:
                 stmt = select(CUDAMatrixDBModel).where(
                     CUDAMatrixDBModel.cuda_version == version
@@ -114,7 +104,6 @@ class CompatibilityResolver:
                     )
                 else:
                     entry = None
-                _CACHE_CUDA[version] = entry
                 return entry
             except Exception as exc:
                 logger.warning(
@@ -128,8 +117,6 @@ class CompatibilityResolver:
         self, db: AsyncSession | None, version: str
     ) -> ROCMMatrixEntry | None:
         if db is not None:
-            if version in _CACHE_ROCM:
-                return _CACHE_ROCM[version]
             try:
                 stmt = select(RocmMatrixDBModel).where(
                     RocmMatrixDBModel.rocm_version == version
@@ -146,7 +133,6 @@ class CompatibilityResolver:
                     )
                 else:
                     entry = None
-                _CACHE_ROCM[version] = entry
                 return entry
             except Exception as exc:
                 logger.warning(
@@ -160,8 +146,6 @@ class CompatibilityResolver:
         self, db: AsyncSession | None, framework: str
     ) -> list[FrameworkVersionEntry]:
         if db is not None:
-            if framework in _CACHE_FRAMEWORK:
-                return _CACHE_FRAMEWORK[framework]
             try:
                 stmt = select(PythonMatrixDBModel).where(
                     PythonMatrixDBModel.framework == framework
@@ -180,7 +164,6 @@ class CompatibilityResolver:
                     )
                     for db_entry in db_entries
                 ]
-                _CACHE_FRAMEWORK[framework] = entries
                 return entries
             except Exception as exc:
                 logger.warning(
@@ -314,11 +297,14 @@ class CompatibilityResolver:
             )
             resolved_packages.append(resolved)
 
-        # Step 4: Collect OS-specific notes
+        # Step 4: Collect compatibility warnings
         framework_names = [p.name for p in packages]
         gpu_required = cuda_required or rocm_required
         os_notes = get_os_notes(target_os, gpu_required, framework_names)
         warnings.extend(os_notes)
+        warnings.extend(
+            self._warn_on_abi_sensitive_hybrid_environment(resolved_packages)
+        )
 
         return ResolvedEnvironment(
             python_version=python_version,
@@ -593,6 +579,25 @@ class CompatibilityResolver:
             cuda_version=cuda_version,
             rocm_version=rocm_version,
         )
+
+    def _warn_on_abi_sensitive_hybrid_environment(
+        self,
+        resolved_packages: list[ResolvedPackage],
+    ) -> list[str]:
+        """Detect ABI-sensitive conda + pip hybrid package mixes."""
+        has_gpu_wheel = any(pkg.cuda_variant for pkg in resolved_packages)
+        has_non_gpu_package = any(not pkg.cuda_variant for pkg in resolved_packages)
+
+        if has_gpu_wheel and has_non_gpu_package:
+            return [
+                (
+                    "This profile mixes conda-managed packages with pip-installed "
+                    "GPU wheel packages. Hybrid conda/pip environments are ABI-sensitive; "
+                    "pip may resolve secondary dependencies and override Conda-managed binaries. "
+                    "Review pins or use a conda-first profile."
+                )
+            ]
+        return []
 
     @staticmethod
     def _resolve_gpu_variant(

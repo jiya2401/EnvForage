@@ -10,15 +10,7 @@ export default function Footer() {
 				padding: "5rem 0 2rem",
 			}}
 		>
-			<div
-				className="container"
-				style={{
-					display: "flex",
-					flexWrap: "wrap",
-					gap: "3rem",
-					justifyContent: "space-between",
-				}}
-			>
+			<div className="container footer-grid">
 				{/* Brand */}
 				<div style={{ flex: "1 1 350px", maxWidth: "450px" }}>
 					<h2
@@ -80,15 +72,7 @@ export default function Footer() {
 				</div>
 
 				{/* Links Container */}
-				<div
-					style={{
-						display: "flex",
-						flexWrap: "wrap",
-						gap: "4rem",
-						flex: "1 1 400px",
-						justifyContent: "flex-end",
-					}}
-				>
+				<div className="footer-links">
 					{/* Product */}
 					<div style={{ minWidth: "120px" }}>
 						<h4
@@ -107,40 +91,16 @@ export default function Footer() {
 								gap: "0.8rem",
 							}}
 						>
-							<Link
-								href="/profiles"
-								style={{
-									color: "var(--text-secondary)",
-									textDecoration: "none",
-								}}
-							>
+							<Link href="/profiles" className="footer-link">
 								Profiles
 							</Link>
-							<Link
-								href="/diagnose"
-								style={{
-									color: "var(--text-secondary)",
-									textDecoration: "none",
-								}}
-							>
+							<Link href="/diagnose" className="footer-link">
 								Diagnose
 							</Link>
-							<Link
-								href="/troubleshoot"
-								style={{
-									color: "var(--text-secondary)",
-									textDecoration: "none",
-								}}
-							>
+							<Link href="/troubleshoot" className="footer-link">
 								Troubleshoot
 							</Link>
-							<Link
-								href="/dependencies"
-								style={{
-									color: "var(--text-secondary)",
-									textDecoration: "none",
-								}}
-							>
+							<Link href="/dependencies" className="footer-link">
 								Dependencies
 							</Link>
 						</div>
@@ -164,40 +124,16 @@ export default function Footer() {
 								gap: "0.8rem",
 							}}
 						>
-							<Link
-								href="/coming-soon"
-								style={{
-									color: "var(--text-secondary)",
-									textDecoration: "none",
-								}}
-							>
+							<Link href="/docs" className="footer-link">
 								Documentation
 							</Link>
-							<Link
-								href="/coming-soon"
-								style={{
-									color: "var(--text-secondary)",
-									textDecoration: "none",
-								}}
-							>
+							<Link href="/docs/getting-started" className="footer-link">
 								Guides
 							</Link>
-							<Link
-								href="/coming-soon"
-								style={{
-									color: "var(--text-secondary)",
-									textDecoration: "none",
-								}}
-							>
+							<Link href="/docs/api" className="footer-link">
 								API Reference
 							</Link>
-							<Link
-								href="/coming-soon"
-								style={{
-									color: "var(--text-secondary)",
-									textDecoration: "none",
-								}}
-							>
+							<Link href="/faq" className="footer-link">
 								FAQ
 							</Link>
 						</div>
@@ -222,41 +158,30 @@ export default function Footer() {
 							}}
 						>
 							<Link
-								href="#"
+								href="https://discord.gg/N2GKNRzDV"
 								target="_blank"
-								style={{
-									color: "var(--text-secondary)",
-									textDecoration: "none",
-								}}
+								className="footer-link"
 							>
 								Join Discord
 							</Link>
 							<Link
 								href="https://github.com/rishabh0510rishabh/EnvForage"
 								target="_blank"
-								style={{
-									color: "var(--text-secondary)",
-									textDecoration: "none",
-								}}
+								className="footer-link"
 							>
 								GitHub
 							</Link>
 							<Link
-								href="/coming-soon"
-								style={{
-									color: "var(--text-secondary)",
-									textDecoration: "none",
-								}}
+								href="https://github.com/rishabh0510rishabh/EnvForage/issues"
+								target="_blank"
+								className="footer-link"
 							>
 								Report Issues
 							</Link>
 							<Link
 								href="https://github.com/rishabh0510rishabh/EnvForage/discussions"
 								target="_blank"
-								style={{
-									color: "var(--text-secondary)",
-									textDecoration: "none",
-								}}
+								className="footer-link"
 							>
 								Discussions
 							</Link>

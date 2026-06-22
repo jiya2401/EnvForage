@@ -159,9 +159,9 @@ class DiagnosticReportSchema(BaseModel):
     """
 
     agent_version: str = Field(
-        "1.0.0",
-        description="Version of the envforge-agent CLI.",
-        examples=["1.0.0"],
+        "2.0.0",
+        description="Version of the envforage CLI.",
+        examples=["2.0.0"],
     )
     os: OSInfo
     cpu: CPUInfo
@@ -201,7 +201,7 @@ class DiagnosticReportSchema(BaseModel):
     model_config = {
         "json_schema_extra": {
             "example": {
-                "agent_version": "1.0.0",
+                "agent_version": "2.0.0",
                 "os": {
                     "name": "Ubuntu 22.04",
                     "version": "22.04",
@@ -306,3 +306,19 @@ class DiagnoseResponse(BaseModel):
         description="General compatibility recommendations.",
         examples=[["Upgrade NVIDIA driver to latest stable release"]],
     )
+
+
+class TaskResponse(BaseModel):
+    """Response when a task is offloaded to Celery."""
+
+    task_id: str = Field(..., description="Celery task ID for polling.")
+    status: str = Field(..., description="Current status of the task.")
+
+
+class DiagnoseTaskStatus(BaseModel):
+    """Response for GET /diagnose/status/{task_id}."""
+
+    task_id: str
+    status: str
+    result: DiagnoseResponse | None = None
+    error: str | None = None

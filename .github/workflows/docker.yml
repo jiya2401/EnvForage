@@ -1,0 +1,49 @@
+name: Docker Build & Security Scan
+
+on:
+  push:
+    branches: ["main", "production"]
+  pull_request:
+    branches: ["main", "production"]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  build-and-scan:
+    name: Build & Scan Docker Images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build backend image
+        run: docker build -t envforage-backend:ci ./backend
+
+      - name: Run Trivy vulnerability scanner (backend)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: envforage-backend:ci
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Build frontend image
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_API_URL=/api/v1 \
+            --build-arg BACKEND_API_URL=http://api:8000 \
+            -t envforage-frontend:ci ./frontend
+
+      - name: Run Trivy vulnerability scanner (frontend)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: envforage-frontend:ci
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true

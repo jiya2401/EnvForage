@@ -27,10 +27,33 @@ const jetbrainsMono = JetBrains_Mono({
 	display: "swap",
 });
 
+const BASE_URL = (() => {
+	let raw = process.env.NEXT_PUBLIC_BASE_URL?.trim() || "http://localhost:3000";
+	if (raw.endsWith("/")) raw = raw.slice(0, -1);
+	if (!raw.startsWith("http")) raw = `https://${raw}`;
+	return raw;
+})();
+
 export const metadata: Metadata = {
+	metadataBase: new URL(BASE_URL),
 	title: "EnvForage | ML Environment Provisioning",
 	description:
 		"Generate intelligent, safe, and deterministic ML/AI environment setup scripts.",
+	openGraph: {
+		title: "EnvForage | ML Environment Provisioning",
+		description:
+			"Generate intelligent, safe, and deterministic ML/AI environment setup scripts.",
+		url: BASE_URL,
+		siteName: "EnvForage",
+		locale: "en_US",
+		type: "website",
+	},
+	twitter: {
+		card: "summary_large_image",
+		title: "EnvForage | ML Environment Provisioning",
+		description:
+			"Generate intelligent, safe, and deterministic ML/AI environment setup scripts.",
+	},
 };
 
 export default function RootLayout({
@@ -50,7 +73,7 @@ export default function RootLayout({
                 storedTheme === "light" ||
                 storedTheme === "system"
                   ? storedTheme
-                  : "light";
+                  : "dark";
 
               if (theme === "system") {
                 const prefersDark =
@@ -78,17 +101,12 @@ export default function RootLayout({
 				style={{ backgroundColor: "var(--bg-core)" }}
 			>
 				<ThemeProvider>
-					{/* Navigation Header */}
 					<Navbar />
-
-					{/* Main Content */}
 					<main
 						style={{ minHeight: "calc(100vh - 140px)", paddingTop: "76px" }}
 					>
 						{children}
 					</main>
-
-					{/* Footer */}
 					<Footer />
 					<ScrollToTop />
 				</ThemeProvider>
