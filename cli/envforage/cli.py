@@ -759,6 +759,7 @@ def _run_sandbox_verify(profile: str | None, output: str | None, quiet: bool, sa
     default=False,
     help="Suppress all output except the JSON verification report.",
 )
+@click.option(
     "--json",
     "json_output",
     is_flag=True,
