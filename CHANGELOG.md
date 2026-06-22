@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-06-22
+
+### Fixed
+- **Backend Quality:** Applied automated code quality and linting fixes across the backend:
+  - Upgraded deprecated `Union[X, None]` to `X | None` type annotations in Alembic migrations.
+  - Upgraded deprecated `typing.Sequence` to `collections.abc.Sequence` in Alembic migrations.
+  - Sorted and organized import blocks in migration scripts and maintenance scripts.
+  - Removed unused imports (`alembic.op`, `sqlalchemy`).
+  - Fixed missing trailing newlines at end of files.
+
 ## [2.3.0] - 2026-06-22
 
 ### Added
