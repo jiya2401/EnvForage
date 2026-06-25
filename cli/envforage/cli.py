@@ -21,6 +21,7 @@ import click
 import httpx
 from rich.console import Console
 from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.syntax import Syntax
 from rich.table import Table
 from rich import box
@@ -230,13 +231,25 @@ async def _diagnose(
     if not quiet:
         console.print(
             Panel(
-                f"[bold cyan]EnvForage Diagnostic Agent[/] v{__version__}\n"
-                "[dim]Scanning your environment...[/]",
+                f"[bold cyan]EnvForage Diagnostic Agent[/] v{__version__}",
                 expand=False,
             )
         )
 
-    report = ReportBuilder(timeout=timeout).build()
+    if quiet:
+        report = ReportBuilder(timeout=timeout).build()
+    else:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Scanning environment...", total=None)
+            def _update_progress(msg: str) -> None:
+                progress.update(task, description=msg)
+            report = ReportBuilder(timeout=timeout).build(progress_callback=_update_progress)
+            progress.update(task, description="[green]Scan complete[/]")
 
     if report.os.wsl_version == "WSL2":
         wsl_gpu_ok, wsl_gpu_issues = detect_wsl_gpu_passthrough(timeout=timeout)
@@ -803,7 +816,20 @@ def verify(
     import subprocess
 
     # 1. Determine active Python
-    report = ReportBuilder().build()
+    if quiet or json_output:
+        report = ReportBuilder().build()
+    else:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Scanning environment...", total=None)
+            def _update_progress(msg: str) -> None:
+                progress.update(task, description=msg)
+            report = ReportBuilder().build(progress_callback=_update_progress)
+            progress.update(task, description="[green]Scan complete[/]")
     active_py = report.active_python
     py_executable = active_py.path if active_py else sys.executable
 
@@ -1318,7 +1344,20 @@ async def _troubleshoot(api_url: str, quiet: bool) -> None:
         )
 
     # Build diagnostic report
-    report = ReportBuilder().build()
+    if quiet:
+        report = ReportBuilder().build()
+    else:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TimeElapsedColumn(),
+            console=console,
+        ) as progress:
+            task = progress.add_task("Building diagnostic report...", total=None)
+            def _update_progress(msg: str) -> None:
+                progress.update(task, description=msg)
+            report = ReportBuilder().build(progress_callback=_update_progress)
+            progress.update(task, description="[green]Report ready[/]")
     url = f"{api_url.rstrip('/')}/api/v1/troubleshoot"
 
     if not quiet:
