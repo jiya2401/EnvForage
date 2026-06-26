@@ -5,7 +5,7 @@ const createJestConfig = nextJest({ dir: './' })
 
 const config: Config = {
   testEnvironment: 'jsdom',
-  testMatch: ['**/tests/unit/**/*.test.ts'],
+  testMatch: ['**/tests/unit/**/*.test.{ts,tsx}'], 
 }
 
 export default createJestConfig(config) 
